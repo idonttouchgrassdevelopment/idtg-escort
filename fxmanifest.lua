@@ -1,9 +1,9 @@
 fx_version 'cerulean'
 game 'gta5'
 
-author 'Your Name'
+author 'IDTG Development'
 description 'Player Escort Script - Multi-Framework Compatible'
-version '2.0.0'
+version '1.0.0'
 
 shared_script 'bridge/shared.lua'
 shared_script 'config.lua'

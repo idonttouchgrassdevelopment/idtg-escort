@@ -1,3 +1,11 @@
+-- =============================================================================
+-- IDTG Escort Script - Enhanced with Animation System
+-- =============================================================================
+-- Version: 3.0.0
+-- Description: Multi-framework escort script with full animation support
+-- =============================================================================
+
+-- State Variables
 local isEscorting = false
 local escortedPlayer = nil
 local isBeingEscorted = false
@@ -5,6 +13,45 @@ local escortedBy = nil
 local targetIsDead = false
 local lastActionTime = 0
 local stopRequestPending = false
+local animationActive = false
+local animationDictionary = nil
+
+-- Animation Dictionaries for Different States
+local ANIM_DICTS = {
+    -- Escort animations (alive players)
+    escort_start = "anim@heists@box_carry@",
+    escort_walk = "anim@heists@box_carry@",
+    escort_stop = "anim@heists@box_carry@",
+    
+    -- Carry animations (dead players - shoulder)
+    carry_start = "missfinale_c2mcs_1",
+    carry_walk = "missfinale_c2mcs_1",
+    carry_stop = "missfinale_c2mcs_1",
+    
+    -- Carry animations (dead players - drag)
+    drag_start = "anim@gangops@hostage@",
+    drag_walk = "anim@gangops@hostage@",
+    drag_stop = "anim@gangops@hostage@"
+}
+
+-- Animation Clips for Different Actions
+local ANIM_CLIPS = {
+    escort_start = "idle",
+    escort_walk = "walk",
+    escort_stop = "idle",
+    
+    carry_start = "fin_c2_mcs_1_camman",
+    carry_walk = "fin_c2_mcs_1_camman",
+    carry_stop = "fin_c2_mcs_1_camman",
+    
+    drag_start = "victim_leader-1",
+    drag_walk = "victim_loop-1",
+    drag_stop = "victim_leader-1"
+}
+
+-- =============================================================================
+-- UTILITY FUNCTIONS
+-- =============================================================================
 
 local function getCooldownMs()
     return Config.ActionCooldown or Config.EscortCooldown or 5000
@@ -30,6 +77,250 @@ end
 local function stampCooldown()
     lastActionTime = GetGameTimer()
 end
+
+-- =============================================================================
+-- ANIMATION SYSTEM
+-- =============================================================================
+
+-- Load animation dictionary with timeout protection
+local function loadAnimationDictionary(dict)
+    if not dict or dict == "" then
+        Framework.Debug("Invalid animation dictionary provided")
+        return false
+    end
+    
+    -- Check if already loaded
+    if HasAnimDictLoaded(dict) then
+        return true
+    end
+    
+    RequestAnimDict(dict)
+    local timeout = 5000 -- 5 second timeout
+    local startTime = GetGameTimer()
+    
+    while not HasAnimDictLoaded(dict) do
+        Wait(10)
+        
+        -- Timeout protection
+        if GetGameTimer() - startTime > timeout then
+            Framework.Debug("Failed to load animation dictionary: " .. dict)
+            return false
+        end
+    end
+    
+    Framework.Debug("Successfully loaded animation dictionary: " .. dict)
+    return true
+end
+
+-- Play animation on a ped with blending
+local function playAnimation(ped, dict, anim, flag, blendIn, blendOut, duration)
+    if not DoesEntityExist(ped) then
+        return false
+    end
+    
+    if not loadAnimationDictionary(dict) then
+        Framework.Debug("Cannot play animation - dictionary not loaded: " .. dict)
+        return false
+    end
+    
+    -- Set animation blending for smooth transitions
+    blendIn = blendIn or 0.3 -- Default 300ms blend in
+    blendOut = blendOut or 0.3 -- Default 300ms blend out
+    
+    TaskPlayAnim(ped, dict, anim, 8.0, -8.0, duration or -1, flag, 0, false, false, false)
+    
+    return true
+end
+
+-- Clear animation from a ped
+local function clearAnimation(ped)
+    if not DoesEntityExist(ped) then
+        return
+    end
+    
+    ClearPedTasks(ped)
+    ClearPedSecondaryTask(ped)
+    ClearPedTasksImmediately(ped)
+end
+
+-- Stop animation and mark as inactive
+local function stopAnimation(ped)
+    if not animationActive or not animationDictionary then
+        return
+    end
+    
+    clearAnimation(ped)
+    RemoveAnimDict(animationDictionary)
+    animationActive = false
+    animationDictionary = nil
+end
+
+-- =============================================================================
+-- ESCORT ANIMATION HANDLERS
+-- =============================================================================
+
+-- Play start animation when escort begins
+local function playEscortStartAnimation(escorterPed, targetPed, isDead, isShoulder)
+    if not DoesEntityExist(escorterPed) or not DoesEntityExist(targetPed) then
+        Framework.Debug("Cannot play start animation - invalid peds")
+        return false
+    end
+    
+    -- Select appropriate animation based on state
+    local dict, anim, escorterAnim
+    
+    if isDead then
+        if isShoulder then
+            dict = ANIM_DICTS.carry_start
+            anim = ANIM_CLIPS.carry_start
+        else
+            dict = ANIM_DICTS.drag_start
+            anim = ANIM_CLIPS.drag_start
+        end
+    else
+        dict = ANIM_DICTS.escort_start
+        anim = ANIM_CLIPS.escort_start
+    end
+    
+    animationDictionary = dict
+    
+    -- Play animation on the target (escorted person)
+    local success = playAnimation(
+        targetPed, 
+        dict, 
+        anim, 
+        49, -- Flag: allow movement + upper body
+        0.5, -- 500ms blend in for smooth start
+        0.3, -- 300ms blend out
+        1000 -- 1 second initial animation
+    )
+    
+    if success then
+        animationActive = true
+        Framework.Debug("Started escort animation: " .. dict .. " @ " .. anim)
+        
+        -- Clear tasks for escorter to prepare for synchronized movement
+        ClearPedTasks(escorterPed)
+        
+        return true
+    end
+    
+    return false
+end
+
+-- Play walking animation while escorting is active
+local function playEscortWalkAnimation(ped, isDead, isShoulder)
+    if not DoesEntityExist(ped) or not animationActive then
+        return
+    end
+    
+    -- Select appropriate walking animation
+    local dict, anim
+    
+    if isDead then
+        if isShoulder then
+            dict = ANIM_DICTS.carry_walk
+            anim = ANIM_CLIPS.carry_walk
+        else
+            dict = ANIM_DICTS.drag_walk
+            anim = ANIM_CLIPS.drag_walk
+        end
+    else
+        dict = ANIM_DICTS.escort_walk
+        anim = ANIM_CLIPS.escort_walk
+    end
+    
+    -- Update animation dictionary if needed
+    if animationDictionary ~= dict then
+        if HasAnimDictLoaded(animationDictionary) then
+            RemoveAnimDict(animationDictionary)
+        end
+        if loadAnimationDictionary(dict) then
+            animationDictionary = dict
+        end
+    end
+    
+    -- Play walking animation with movement allowed
+    playAnimation(
+        ped, 
+        dict, 
+        anim, 
+        49, -- Flag: allow movement
+        0.3, -- 300ms blend in
+        0.3, -- 300ms blend out
+        -1 -- Loop indefinitely
+    )
+end
+
+-- Play stop animation when escort ends
+local function playEscortStopAnimation(ped, isDead, isShoulder)
+    if not DoesEntityExist(ped) then
+        return
+    end
+    
+    if not animationActive or not animationDictionary then
+        -- No active animation, just clear tasks
+        clearAnimation(ped)
+        return
+    end
+    
+    -- Select appropriate stop animation
+    local dict, anim
+    
+    if isDead then
+        if isShoulder then
+            dict = ANIM_DICTS.carry_stop
+            anim = ANIM_CLIPS.carry_stop
+        else
+            dict = ANIM_DICTS.drag_stop
+            anim = ANIM_CLIPS.drag_stop
+        end
+    else
+        dict = ANIM_DICTS.escort_stop
+        anim = ANIM_CLIPS.escort_stop
+    end
+    
+    -- Play stop/release animation
+    local success = playAnimation(
+        ped, 
+        dict, 
+        anim, 
+        49, -- Flag: allow movement
+        0.2, -- 200ms blend in for quick release
+        0.5, -- 500ms blend out for smooth stop
+        1500 -- 1.5 second release animation
+    )
+    
+    if success then
+        Framework.Debug("Playing stop animation: " .. dict .. " @ " .. anim)
+        
+        -- Wait for animation to complete, then clear
+        CreateThread(function()
+            Wait(1500)
+            
+            -- Clear animation and dictionary
+            if animationDictionary then
+                RemoveAnimDict(animationDictionary)
+            end
+            
+            clearAnimation(ped)
+            animationActive = false
+            animationDictionary = nil
+        end)
+    else
+        -- Animation failed, just clear immediately
+        if animationDictionary then
+            RemoveAnimDict(animationDictionary)
+        end
+        clearAnimation(ped)
+        animationActive = false
+        animationDictionary = nil
+    end
+end
+
+-- =============================================================================
+-- TARGET SELECTION
+-- =============================================================================
 
 local function getTargetByMode(mode)
     local closestPlayer, distance = Framework.Client.GetClosestPlayer(Config.MaxEscortDistance)
@@ -68,6 +359,10 @@ local function getNearestTargetServerId(requireEscortedState)
 
     return GetPlayerServerId(closestPlayer)
 end
+
+-- =============================================================================
+-- ESCORT REQUEST HANDLING
+-- =============================================================================
 
 local function requestStart(mode)
     if isEscorting or isBeingEscorted then
@@ -157,6 +452,10 @@ local function requestVehicleAction(action, targetServerId)
     stampCooldown()
 end
 
+-- =============================================================================
+-- COMMANDS AND KEYBINDS
+-- =============================================================================
+
 RegisterCommand('escort', function()
     toggleMode('escort')
 end, false)
@@ -183,6 +482,10 @@ RegisterKeyMapping('carry', 'Toggle Carry Player (dead target)', 'keyboard', Con
 RegisterKeyMapping('unescort', 'Stop escort/carry (self, target, or escorter)', 'keyboard', Config.DefaultUnescortKey or 'U')
 RegisterKeyMapping('putinvehicle', 'Put nearby escorted player in nearest vehicle', 'keyboard', Config.DefaultPutInVehicleKey or 'J')
 RegisterKeyMapping('takeoutvehicle', 'Take escorted player out of vehicle', 'keyboard', Config.DefaultTakeOutVehicleKey or 'K')
+
+-- =============================================================================
+-- OX_TARGET INTEGRATION
+-- =============================================================================
 
 if Config.UseTarget then
     CreateThread(function()
@@ -289,6 +592,11 @@ if Config.UseTarget then
     end)
 end
 
+-- =============================================================================
+-- ESCORT EVENT HANDLERS
+-- =============================================================================
+
+-- Event: Start escorting (escorter side)
 RegisterNetEvent('escort:start', function(targetId)
     local targetPlayer = GetPlayerFromServerId(targetId)
     if targetPlayer == -1 or targetPlayer == nil then
@@ -304,12 +612,15 @@ RegisterNetEvent('escort:start', function(targetId)
     escortedPlayer = targetPlayer
     isEscorting = true
 
+    Framework.Debug('Started escorting player: ' .. targetId)
+
     CreateThread(function()
         while isEscorting do
             Wait(500)
 
             local myPed = PlayerPedId()
             local ped = GetPlayerPed(escortedPlayer)
+            
             if not DoesEntityExist(myPed) or not DoesEntityExist(ped) then
                 if escortedPlayer then
                     TriggerServerEvent('escort:stopAction', GetPlayerServerId(escortedPlayer))
@@ -320,6 +631,7 @@ RegisterNetEvent('escort:start', function(targetId)
     end)
 end)
 
+-- Event: Being escorted (target side) - ENHANCED WITH ANIMATIONS
 RegisterNetEvent('escort:beingEscorted', function(escorterId)
     local escorterPlayer = GetPlayerFromServerId(escorterId)
     if escorterPlayer == -1 then
@@ -330,10 +642,19 @@ RegisterNetEvent('escort:beingEscorted', function(escorterId)
     isBeingEscorted = true
 
     local myPed = PlayerPedId()
-    if IsPedDeadOrDying(myPed, true) or IsEntityDead(myPed) then
+    local escorterPed = GetPlayerPed(escortedBy)
+    local isDead = IsPedDeadOrDying(myPed, true) or IsEntityDead(myPed)
+    local isShoulder = Config.CarryOnShoulder
+
+    -- Set ragdoll for dead players
+    if isDead then
         SetPedToRagdoll(myPed, Config.RagdollDuration or 60000, Config.RagdollDuration or 60000, false, false, false, false)
     end
 
+    -- Play start animation
+    playEscortStartAnimation(escorterPed, myPed, isDead, isShoulder)
+
+    -- Main escort loop with animation updates
     CreateThread(function()
         while isBeingEscorted do
             Wait(0)
@@ -347,8 +668,8 @@ RegisterNetEvent('escort:beingEscorted', function(escorterId)
             end
 
             if not IsEntityAttachedToEntity(me, escorterPed) then
-                local dead = IsPedDeadOrDying(me, true) or IsEntityDead(me)
-                if dead then
+                -- Set ragdoll for dead players
+                if isDead then
                     SetPedToRagdoll(me, Config.RagdollDuration or 60000, Config.RagdollDuration or 60000, false, false, false, false)
 
                     if Config.CarryOnShoulder then
@@ -360,12 +681,23 @@ RegisterNetEvent('escort:beingEscorted', function(escorterId)
                     AttachEntityToEntity(me, escorterPed, 11816, 0.54, 0.54, 0.0, 0.0, 0.0, 0.0, false, false, false, false, 2, true)
                 end
             end
+
+            -- Update walking animation if escorter is moving
+            if animationActive then
+                playEscortWalkAnimation(me, isDead, isShoulder)
+            end
         end
     end)
 end)
 
+-- Event: Vehicle actions
 RegisterNetEvent('escort:vehicle', function(action)
     local myPed = PlayerPedId()
+
+    -- Stop animation before vehicle action
+    if animationActive then
+        stopAnimation(myPed)
+    end
 
     if action == 'putin' then
         local coords = GetEntityCoords(myPed)
@@ -402,7 +734,6 @@ RegisterNetEvent('escort:vehicle', function(action)
             notify('Target is not in a vehicle', 'error')
             return
         end
-
         TaskLeaveVehicle(myPed, vehicle, 16)
         Wait(300)
         ClearPedTasks(myPed)
@@ -410,12 +741,21 @@ RegisterNetEvent('escort:vehicle', function(action)
     end
 end)
 
+-- Event: Stop escort/carry - ENHANCED WITH STOP ANIMATION
 RegisterNetEvent('escort:stop', function()
     stopRequestPending = false
 
+    local myPed = PlayerPedId()
+
+    -- Handle escorter side
     if isEscorting and escortedPlayer then
         local targetPed = GetPlayerPed(escortedPlayer)
         if DoesEntityExist(targetPed) then
+            -- Play stop animation on target before detaching
+            playEscortStopAnimation(targetPed, targetIsDead, Config.CarryOnShoulder)
+            
+            Wait(500) -- Wait for stop animation to start
+            
             DetachEntity(targetPed, true, false)
             if targetIsDead then
                 StopPedRagdoll(targetPed)
@@ -424,25 +764,42 @@ RegisterNetEvent('escort:stop', function()
         end
     end
 
+    -- Handle target (being escorted) side
     if isBeingEscorted then
-        local myPed = PlayerPedId()
         if DoesEntityExist(myPed) then
+            -- Play stop animation on self
+            playEscortStopAnimation(myPed, IsPedDeadOrDying(myPed, true) or IsEntityDead(myPed), Config.CarryOnShoulder)
+            
+            Wait(500) -- Wait for stop animation to start
+            
             DetachEntity(myPed, true, false)
             StopPedRagdoll(myPed)
             ClearPedTasksImmediately(myPed)
         end
     end
 
+    -- Reset state
     isEscorting = false
     escortedPlayer = nil
     isBeingEscorted = false
     escortedBy = nil
     targetIsDead = false
+    
+    -- Reset animation state
+    animationActive = false
+    animationDictionary = nil
+    
+    Framework.Debug('Escort/carry stopped')
 end)
 
+-- Event: Notification
 RegisterNetEvent('escort:notify', function(message, messageType, duration)
     notify(message, messageType, duration)
 end)
+
+-- =============================================================================
+-- CHAT SUGGESTIONS
+-- =============================================================================
 
 TriggerEvent('chat:addSuggestion', '/escort', 'Escort or release a nearby living player')
 TriggerEvent('chat:addSuggestion', '/carry', 'Carry or release a nearby dead player')
@@ -450,11 +807,18 @@ TriggerEvent('chat:addSuggestion', '/unescort', 'Force stop escort/carry (works 
 TriggerEvent('chat:addSuggestion', '/putinvehicle', 'Put nearby escorted/carry target into nearest vehicle')
 TriggerEvent('chat:addSuggestion', '/takeoutvehicle', 'Take nearby escorted/carry target out of vehicle')
 
+-- =============================================================================
+-- RESOURCE STOP HANDLER - CLEANUP ANIMATIONS
+-- =============================================================================
+
 AddEventHandler('onResourceStop', function(resourceName)
     if GetCurrentResourceName() ~= resourceName then
         return
     end
 
+    local myPed = PlayerPedId()
+
+    -- Cleanup escorter side
     if isEscorting and escortedPlayer then
         local targetPed = GetPlayerPed(escortedPlayer)
         if DoesEntityExist(targetPed) then
@@ -463,18 +827,32 @@ AddEventHandler('onResourceStop', function(resourceName)
                 StopPedRagdoll(targetPed)
             end
             ClearPedTasksImmediately(targetPed)
+            
+            -- Stop any active animations
+            if animationActive and animationDictionary then
+                RemoveAnimDict(animationDictionary)
+            end
         end
     end
 
+    -- Cleanup target side
     if isBeingEscorted then
-        local myPed = PlayerPedId()
         if DoesEntityExist(myPed) then
             DetachEntity(myPed, true, false)
             StopPedRagdoll(myPed)
             ClearPedTasksImmediately(myPed)
+            
+            -- Stop any active animations
+            if animationActive and animationDictionary then
+                RemoveAnimDict(animationDictionary)
+            end
         end
     end
 end)
+
+-- =============================================================================
+-- DEBUG COMMAND
+-- =============================================================================
 
 RegisterCommand('escortdebug', function()
     print('=== ESCORT DEBUG ===')
@@ -482,7 +860,10 @@ RegisterCommand('escortdebug', function()
     print('Escorted Player: ' .. tostring(escortedPlayer))
     print('Is Being Escorted: ' .. tostring(isBeingEscorted))
     print('Escorted By: ' .. tostring(escortedBy))
+    print('Target Is Dead: ' .. tostring(targetIsDead))
     print('Last Action Time: ' .. tostring(lastActionTime))
+    print('Animation Active: ' .. tostring(animationActive))
+    print('Animation Dictionary: ' .. tostring(animationDictionary))
 
     local closestPlayer, distance = Framework.Client.GetClosestPlayer(Config.MaxEscortDistance)
     print('Closest Player Index: ' .. tostring(closestPlayer))
