@@ -76,10 +76,6 @@ local function requestStart(mode)
 end
 
 local function requestStop()
-    if onCooldown() then
-        return
-    end
-
     if isEscorting and escortedPlayer then
         TriggerServerEvent('escort:stopAction', GetPlayerServerId(escortedPlayer))
         stampCooldown()
@@ -131,9 +127,6 @@ if Config.UseTarget then
                         local targetServerId = GetPlayerServerId(targetId)
 
                         if isEscorting then
-                            if onCooldown() then
-                                return
-                            end
                             TriggerServerEvent('escort:stopAction', targetServerId)
                             stampCooldown()
                             return
