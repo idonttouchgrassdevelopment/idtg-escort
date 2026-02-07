@@ -16,7 +16,7 @@ local animationActive = false
 local animationDictionary = nil
 local escortedAnimationDictionary = nil
 
--- Animation Dictionaries for Different States
+-- Default animation dictionaries/clips (overridden by Config.Animations when present)
 local ANIM_DICTS = {
     escort_start = 'random@arrests',
     escort_walk = 'random@arrests',
@@ -24,13 +24,94 @@ local ANIM_DICTS = {
     escorted_loop = 'random@arrests@busted'
 }
 
--- Animation Clips for Different Actions
 local ANIM_CLIPS = {
     escort_start = 'generic_radio_enter',
     escort_walk = 'generic_radio_chatter',
     escort_stop = 'generic_radio_enter',
     escorted_loop = 'idle_a'
 }
+
+local function getEscortAnimConfig(key)
+    local defaults = {
+        escort_start = { dict = ANIM_DICTS.escort_start, clip = ANIM_CLIPS.escort_start, flag = 49, duration = 1000, blendIn = 0.5, blendOut = 0.3 },
+        escort_walk = { dict = ANIM_DICTS.escort_walk, clip = ANIM_CLIPS.escort_walk, flag = 49, duration = -1, blendIn = 0.3, blendOut = 0.3 },
+        escort_stop = { dict = ANIM_DICTS.escort_stop, clip = ANIM_CLIPS.escort_stop, flag = 49, duration = 1500, blendIn = 0.2, blendOut = 0.5 },
+        escorted_loop = { dict = ANIM_DICTS.escorted_loop, clip = ANIM_CLIPS.escorted_loop, flag = 33, duration = -1, blendIn = 0.2, blendOut = 0.2 }
+    }
+
+    local cfg = Config.Animations and Config.Animations.Escort
+    if not cfg then
+        return defaults[key]
+    end
+
+    local map = {
+        escort_start = cfg.Start,
+        escort_walk = cfg.Walk,
+        escort_stop = cfg.Stop,
+        escorted_loop = cfg.EscortedLoop
+    }
+
+    local selected = map[key]
+    if type(selected) ~= 'table' then
+        return defaults[key]
+    end
+
+    local default = defaults[key]
+    return {
+        dict = selected.dict or default.dict,
+        clip = selected.clip or default.clip,
+        flag = selected.flag or default.flag,
+        duration = selected.duration or default.duration,
+        blendIn = selected.blendIn or default.blendIn,
+        blendOut = selected.blendOut or default.blendOut
+    }
+end
+
+local function getVehicleAnimConfig(action, role)
+    local defaults = {
+        escorter_putin = { dict = 'random@arrests', clip = 'generic_radio_enter', flag = 49, duration = 1200, blendIn = 0.2, blendOut = 0.2 },
+        escorter_takeout = { dict = 'random@arrests', clip = 'generic_radio_chatter', flag = 49, duration = 1200, blendIn = 0.2, blendOut = 0.2 },
+        target_putin = { dict = 'random@arrests@busted', clip = 'idle_a', flag = 33, duration = 1200, blendIn = 0.2, blendOut = 0.2 },
+        target_takeout = { dict = 'random@arrests@busted', clip = 'idle_a', flag = 33, duration = 1000, blendIn = 0.2, blendOut = 0.2 }
+    }
+
+    local key = ('%s_%s'):format(role == 'target' and 'target' or 'escorter', action == 'takeout' and 'takeout' or 'putin')
+    local cfg = Config.Animations and Config.Animations.Vehicle
+    local selected = nil
+
+    if cfg then
+        local cfgMap = {
+            escorter_putin = cfg.EscorterPutIn,
+            escorter_takeout = cfg.EscorterTakeOut,
+            target_putin = cfg.TargetPutIn,
+            target_takeout = cfg.TargetTakeOut
+        }
+        selected = cfgMap[key]
+    end
+
+    local default = defaults[key]
+    if type(selected) ~= 'table' then
+        return default
+    end
+
+    return {
+        dict = selected.dict or default.dict,
+        clip = selected.clip or default.clip,
+        flag = selected.flag or default.flag,
+        duration = selected.duration or default.duration,
+        blendIn = selected.blendIn or default.blendIn,
+        blendOut = selected.blendOut or default.blendOut
+    }
+end
+
+local function getVehicleActionDelay(action)
+    local cfg = Config.Animations and Config.Animations.Vehicle
+    if action == 'takeout' then
+        return (cfg and cfg.ExitDelayMs) or 1000
+    end
+
+    return (cfg and cfg.EnterDelayMs) or 1200
+end
 
 -- =============================================================================
 -- UTILITY FUNCTIONS
@@ -158,25 +239,22 @@ local function playEscortStartAnimation(actorPed)
         Framework.Debug("Cannot play start animation - invalid ped")
         return false
     end
-    local dict = ANIM_DICTS.escort_start
-    local anim = ANIM_CLIPS.escort_start
+    local cfg = getEscortAnimConfig('escort_start')
+    animationDictionary = cfg.dict
 
-    animationDictionary = dict
-    
-    -- Play animation on the actor (escorting player)
     local success = playAnimation(
         actorPed,
-        dict, 
-        anim, 
-        49, -- Flag: allow movement + upper body
-        0.5, -- 500ms blend in for smooth start
-        0.3, -- 300ms blend out
-        1000 -- 1 second initial animation
+        cfg.dict,
+        cfg.clip,
+        cfg.flag,
+        cfg.blendIn,
+        cfg.blendOut,
+        cfg.duration
     )
     
     if success then
         animationActive = true
-        Framework.Debug("Started escort animation: " .. dict .. " @ " .. anim)
+        Framework.Debug("Started escort animation: " .. cfg.dict .. " @ " .. cfg.clip)
 
         return true
     end
@@ -189,12 +267,11 @@ local function playEscortedAliveAnimation(ped)
         return
     end
 
-    local dict = ANIM_DICTS.escorted_loop
-    local anim = ANIM_CLIPS.escorted_loop
+    local cfg = getEscortAnimConfig('escorted_loop')
 
-    if loadAnimationDictionary(dict) then
-        escortedAnimationDictionary = dict
-        TaskPlayAnim(ped, dict, anim, 8.0, -8.0, -1, 33, 0, false, false, false)
+    if loadAnimationDictionary(cfg.dict) then
+        escortedAnimationDictionary = cfg.dict
+        TaskPlayAnim(ped, cfg.dict, cfg.clip, 8.0, -8.0, cfg.duration, cfg.flag, 0, false, false, false)
     end
 end
 
@@ -203,28 +280,25 @@ local function playEscortWalkAnimation(ped)
     if not DoesEntityExist(ped) or not animationActive then
         return
     end
-    local dict = ANIM_DICTS.escort_walk
-    local anim = ANIM_CLIPS.escort_walk
+    local cfg = getEscortAnimConfig('escort_walk')
 
-    -- Update animation dictionary if needed
-    if animationDictionary ~= dict then
-        if HasAnimDictLoaded(animationDictionary) then
+    if animationDictionary ~= cfg.dict then
+        if animationDictionary and HasAnimDictLoaded(animationDictionary) then
             RemoveAnimDict(animationDictionary)
         end
-        if loadAnimationDictionary(dict) then
-            animationDictionary = dict
+        if loadAnimationDictionary(cfg.dict) then
+            animationDictionary = cfg.dict
         end
     end
-    
-    -- Play walking animation with movement allowed
+
     playAnimation(
-        ped, 
-        dict, 
-        anim, 
-        49, -- Flag: allow movement
-        0.3, -- 300ms blend in
-        0.3, -- 300ms blend out
-        -1 -- Loop indefinitely
+        ped,
+        cfg.dict,
+        cfg.clip,
+        cfg.flag,
+        cfg.blendIn,
+        cfg.blendOut,
+        cfg.duration
     )
 end
 
@@ -239,26 +313,24 @@ local function playEscortStopAnimation(ped)
         clearAnimation(ped)
         return
     end
-    local dict = ANIM_DICTS.escort_stop
-    local anim = ANIM_CLIPS.escort_stop
+    local cfg = getEscortAnimConfig('escort_stop')
 
-    -- Play stop/release animation
     local success = playAnimation(
-        ped, 
-        dict, 
-        anim, 
-        49, -- Flag: allow movement
-        0.2, -- 200ms blend in for quick release
-        0.5, -- 500ms blend out for smooth stop
-        1500 -- 1.5 second release animation
+        ped,
+        cfg.dict,
+        cfg.clip,
+        cfg.flag,
+        cfg.blendIn,
+        cfg.blendOut,
+        cfg.duration
     )
     
     if success then
-        Framework.Debug("Playing stop animation: " .. dict .. " @ " .. anim)
+        Framework.Debug("Playing stop animation: " .. cfg.dict .. " @ " .. cfg.clip)
         
         -- Wait for animation to complete, then clear
         CreateThread(function()
-            Wait(1500)
+            Wait(cfg.duration > 0 and cfg.duration or 1200)
             
             -- Clear animation and dictionary
             if animationDictionary then
@@ -393,7 +465,7 @@ local function toggleEscort()
     end
 end
 
-local function requestVehicleAction(action, targetServerId)
+local function requestVehicleAction(action, targetServerId, vehicleNetId)
     if onCooldown() then
         return
     end
@@ -406,7 +478,7 @@ local function requestVehicleAction(action, targetServerId)
         return
     end
 
-    TriggerServerEvent('escort:vehicleAction', targetServerId, action)
+    TriggerServerEvent('escort:vehicleAction', targetServerId, action, vehicleNetId)
     stampCooldown()
 end
 
@@ -540,6 +612,38 @@ if Config.UseTarget then
                     end
                 }
             })
+
+            exports.ox_target:addGlobalVehicle({
+                {
+                    name = 'escort_put_vehicle_selected',
+                    icon = 'fa-solid fa-car-side',
+                    label = 'Put Escorted In This Vehicle',
+                    distance = 3.0,
+                    onSelect = function(data)
+                        if not isEscorting or not escortedPlayer then
+                            notify('You must escort someone first', 'error')
+                            return
+                        end
+
+                        local targetServerId = GetPlayerServerId(escortedPlayer)
+                        if not targetServerId or targetServerId <= 0 then
+                            notify('Escorted player is not available', 'error')
+                            return
+                        end
+
+                        local vehicle = data.entity
+                        if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) then
+                            notify('Invalid vehicle selected', 'error')
+                            return
+                        end
+
+                        requestVehicleAction('putin', targetServerId, VehToNet(vehicle))
+                    end,
+                    canInteract = function(entity)
+                        return isEscorting and escortedPlayer ~= nil and entity and entity ~= 0 and DoesEntityExist(entity)
+                    end
+                }
+            })
         end
     end)
 end
@@ -614,10 +718,11 @@ RegisterNetEvent('escort:beingEscorted', function(escorterId)
                 break
             end
 
+            local escortedCfg = getEscortAnimConfig('escorted_loop')
             if not IsEntityAttachedToEntity(me, escorterPed) then
                 AttachEntityToEntity(me, escorterPed, 11816, 0.35, 0.45, 0.0, 0.0, 0.0, 15.0, false, false, false, false, 2, true)
                 playEscortedAliveAnimation(me)
-            elseif not IsEntityPlayingAnim(me, ANIM_DICTS.escorted_loop, ANIM_CLIPS.escorted_loop, 3) then
+            elseif not IsEntityPlayingAnim(me, escortedCfg.dict, escortedCfg.clip, 3) then
                 playEscortedAliveAnimation(me)
             end
         end
@@ -630,24 +735,33 @@ RegisterNetEvent('escort:vehicleAnimation', function(action)
         return
     end
 
-    local dict = 'random@arrests'
-    local anim = action == 'putin' and 'generic_radio_enter' or 'generic_radio_chatter'
-
-    playAnimation(myPed, dict, anim, 49, 0.2, 0.2, 1200)
+    local cfg = getVehicleAnimConfig(action, 'escorter')
+    playAnimation(myPed, cfg.dict, cfg.clip, cfg.flag, cfg.blendIn, cfg.blendOut, cfg.duration)
 end)
 
 -- Event: Vehicle actions
-RegisterNetEvent('escort:vehicle', function(action)
+RegisterNetEvent('escort:vehicle', function(action, vehicleNetId)
     local myPed = PlayerPedId()
 
-    -- Stop animation before vehicle action
     if animationActive then
         stopAnimation(myPed)
     end
 
+    local targetAnimCfg = getVehicleAnimConfig(action, 'target')
+    playAnimation(myPed, targetAnimCfg.dict, targetAnimCfg.clip, targetAnimCfg.flag, targetAnimCfg.blendIn, targetAnimCfg.blendOut, targetAnimCfg.duration)
+    Wait(getVehicleActionDelay(action))
+
     if action == 'putin' then
-        local coords = GetEntityCoords(myPed)
-        local vehicle = GetClosestVehicle(coords.x, coords.y, coords.z, Config.VehicleSearchRadius or 5.0, 0, 71)
+        local vehicle = 0
+        if vehicleNetId then
+            vehicle = NetToVeh(vehicleNetId)
+        end
+
+        if vehicle == 0 or not DoesEntityExist(vehicle) then
+            local coords = GetEntityCoords(myPed)
+            vehicle = GetClosestVehicle(coords.x, coords.y, coords.z, Config.VehicleSearchRadius or 5.0, 0, 71)
+        end
+
         if vehicle == 0 or not DoesEntityExist(vehicle) then
             notify('No nearby vehicle found', 'error')
             return
@@ -680,6 +794,7 @@ RegisterNetEvent('escort:vehicle', function(action)
             notify('Target is not in a vehicle', 'error')
             return
         end
+
         TaskLeaveVehicle(myPed, vehicle, 16)
         Wait(300)
         ClearPedTasks(myPed)
