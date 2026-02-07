@@ -44,8 +44,8 @@ local function notifyPlayer(playerId, message, messageType)
     TriggerClientEvent('escort:notify', playerId, message, messageType or 'inform', Config.NotifyDuration or 5000)
 end
 
-local function handleRequest(src, targetId, mode)
-    mode = mode == 'carry' and 'carry' or 'escort'
+local function handleRequest(src, targetId)
+    local mode = 'escort'
 
     if not targetId or targetId == src then
         return
@@ -92,51 +92,48 @@ local function handleRequest(src, targetId, mode)
 end
 
 local function handleStop(src, targetId)
-    local originalSource = src
+    local escorter = src
+    local target = escortStates[escorter]
 
-    local expectedTarget = escortStates[src]
-    if expectedTarget and (not targetId or targetId == expectedTarget) then
-        targetId = expectedTarget
-    else
-        local escorter = getEscorterForTarget(src)
-        if escorter then
-            targetId = src
-            src = escorter
+    if not target then
+        escorter = getEscorterForTarget(src)
+        target = escorter and escortStates[escorter] or nil
+    end
+
+    if not escorter or not target then
+        if targetId and escortStates[targetId] == src then
+            escorter = targetId
+            target = src
         elseif targetId then
-            if escortStates[targetId] == src then
-                src = targetId
-                targetId = escortStates[targetId]
-            else
-                local reverseEscorter = getEscorterForTarget(targetId)
-                if reverseEscorter and (reverseEscorter == src or targetId == src or targetId == escortStates[src]) then
-                    src = reverseEscorter
-                    targetId = escortStates[reverseEscorter]
-                else
-                    return
-                end
+            local targetEscorter = getEscorterForTarget(targetId)
+            if targetEscorter and (src == targetId or src == targetEscorter) then
+                escorter = targetEscorter
+                target = escortStates[targetEscorter]
             end
-        else
-            return
         end
     end
 
-    escortStates[src] = nil
-    stampCooldown(src)
-    if targetId then
-        stampCooldown(targetId)
+    if not escorter or not target then
+        return
     end
 
-    TriggerClientEvent('escort:stop', src)
-    if targetId and Framework.Server.PlayerExists(targetId) then
-        TriggerClientEvent('escort:stop', targetId)
+    escortStates[escorter] = nil
+    stampCooldown(escorter)
+    stampCooldown(target)
+
+    if Framework.Server.PlayerExists(escorter) then
+        TriggerClientEvent('escort:stop', escorter)
+    end
+    if Framework.Server.PlayerExists(target) then
+        TriggerClientEvent('escort:stop', target)
     end
 
-    if Framework.Server.PlayerExists(originalSource) then
-        notifyPlayer(originalSource, 'Escort/carry stopped', 'success')
+    if Framework.Server.PlayerExists(src) then
+        notifyPlayer(src, 'Escort stopped', 'success')
     end
 
-    local srcName = Framework.Server.GetPlayerName(src)
-    Framework.Server.Log(('%s (ID: %s) stopped escort/carry'):format(srcName, src), 'info')
+    local srcName = Framework.Server.GetPlayerName(escorter)
+    Framework.Server.Log(('%s (ID: %s) stopped escort'):format(srcName, escorter), 'info')
 end
 
 local function handleVehicleAction(src, targetId, action)
@@ -160,7 +157,7 @@ local function handleVehicleAction(src, targetId, action)
     local isValidPair = (expectedTarget and expectedTarget == targetId) or (escorter and escorter == targetId)
 
     if not isValidPair then
-        notifyPlayer(src, 'You must escort/carry this player first', 'error')
+        notifyPlayer(src, 'You must escort this player first', 'error')
         return
     end
 
@@ -183,7 +180,7 @@ local function handleVehicleAction(src, targetId, action)
 end
 
 RegisterNetEvent('escort:requestAction', function(targetId, mode)
-    handleRequest(source, targetId, mode)
+    handleRequest(source, targetId)
 end)
 
 RegisterNetEvent('escort:stopAction', function(targetId)
@@ -196,7 +193,7 @@ end)
 
 -- Backwards compatibility with older clients
 RegisterNetEvent('escort:requestEscort', function(targetId)
-    handleRequest(source, targetId, 'escort')
+    handleRequest(source, targetId)
 end)
 
 RegisterNetEvent('escort:stopEscort', function(targetId)

@@ -10,7 +10,6 @@ local isEscorting = false
 local escortedPlayer = nil
 local isBeingEscorted = false
 local escortedBy = nil
-local targetIsDead = false
 local lastActionTime = 0
 local stopRequestPending = false
 local animationActive = false
@@ -19,35 +18,18 @@ local escortedAnimationDictionary = nil
 
 -- Animation Dictionaries for Different States
 local ANIM_DICTS = {
-    -- Escort animations (alive players)
-    escort_start = "anim@gangops@hostage@",
-    escort_walk = "anim@gangops@hostage@",
-    escort_stop = "anim@gangops@hostage@",
-    
-    -- Carry animations (dead players - shoulder)
-    carry_start = "missfinale_c2mcs_1",
-    carry_walk = "missfinale_c2mcs_1",
-    carry_stop = "missfinale_c2mcs_1",
-    
-    -- Carry animations (dead players - drag)
-    drag_start = "anim@gangops@hostage@",
-    drag_walk = "anim@gangops@hostage@",
-    drag_stop = "anim@gangops@hostage@"
+    escort_start = 'random@arrests',
+    escort_walk = 'random@arrests',
+    escort_stop = 'random@arrests',
+    escorted_loop = 'random@arrests@busted'
 }
 
 -- Animation Clips for Different Actions
 local ANIM_CLIPS = {
-    escort_start = "perp_idle",
-    escort_walk = "perp_walk",
-    escort_stop = "perp_idle",
-    
-    carry_start = "fin_c2_mcs_1_camman",
-    carry_walk = "fin_c2_mcs_1_camman",
-    carry_stop = "fin_c2_mcs_1_camman",
-    
-    drag_start = "victim_leader-1",
-    drag_walk = "victim_loop-1",
-    drag_stop = "victim_leader-1"
+    escort_start = 'generic_radio_enter',
+    escort_walk = 'generic_radio_chatter',
+    escort_stop = 'generic_radio_enter',
+    escorted_loop = 'idle_a'
 }
 
 -- =============================================================================
@@ -171,31 +153,17 @@ end
 -- =============================================================================
 
 -- Play start animation when escort begins
-local function playEscortStartAnimation(actorPed, isDead, isShoulder)
+local function playEscortStartAnimation(actorPed)
     if not DoesEntityExist(actorPed) then
         Framework.Debug("Cannot play start animation - invalid ped")
         return false
     end
-    
-    -- Select appropriate animation based on state
-    local dict, anim
-    
-    if isDead then
-        if isShoulder then
-            dict = ANIM_DICTS.carry_start
-            anim = ANIM_CLIPS.carry_start
-        else
-            dict = ANIM_DICTS.drag_start
-            anim = ANIM_CLIPS.drag_start
-        end
-    else
-        dict = ANIM_DICTS.escort_start
-        anim = ANIM_CLIPS.escort_start
-    end
-    
+    local dict = ANIM_DICTS.escort_start
+    local anim = ANIM_CLIPS.escort_start
+
     animationDictionary = dict
     
-    -- Play animation on the actor (escorter/carrying player)
+    -- Play animation on the actor (escorting player)
     local success = playAnimation(
         actorPed,
         dict, 
@@ -221,8 +189,8 @@ local function playEscortedAliveAnimation(ped)
         return
     end
 
-    local dict = ANIM_DICTS.escort_walk
-    local anim = ANIM_CLIPS.drag_walk
+    local dict = ANIM_DICTS.escorted_loop
+    local anim = ANIM_CLIPS.escorted_loop
 
     if loadAnimationDictionary(dict) then
         escortedAnimationDictionary = dict
@@ -231,27 +199,13 @@ local function playEscortedAliveAnimation(ped)
 end
 
 -- Play walking animation while escorting is active
-local function playEscortWalkAnimation(ped, isDead, isShoulder)
+local function playEscortWalkAnimation(ped)
     if not DoesEntityExist(ped) or not animationActive then
         return
     end
-    
-    -- Select appropriate walking animation
-    local dict, anim
-    
-    if isDead then
-        if isShoulder then
-            dict = ANIM_DICTS.carry_walk
-            anim = ANIM_CLIPS.carry_walk
-        else
-            dict = ANIM_DICTS.drag_walk
-            anim = ANIM_CLIPS.drag_walk
-        end
-    else
-        dict = ANIM_DICTS.escort_walk
-        anim = ANIM_CLIPS.escort_walk
-    end
-    
+    local dict = ANIM_DICTS.escort_walk
+    local anim = ANIM_CLIPS.escort_walk
+
     -- Update animation dictionary if needed
     if animationDictionary ~= dict then
         if HasAnimDictLoaded(animationDictionary) then
@@ -275,7 +229,7 @@ local function playEscortWalkAnimation(ped, isDead, isShoulder)
 end
 
 -- Play stop animation when escort ends
-local function playEscortStopAnimation(ped, isDead, isShoulder)
+local function playEscortStopAnimation(ped)
     if not DoesEntityExist(ped) then
         return
     end
@@ -285,23 +239,9 @@ local function playEscortStopAnimation(ped, isDead, isShoulder)
         clearAnimation(ped)
         return
     end
-    
-    -- Select appropriate stop animation
-    local dict, anim
-    
-    if isDead then
-        if isShoulder then
-            dict = ANIM_DICTS.carry_stop
-            anim = ANIM_CLIPS.carry_stop
-        else
-            dict = ANIM_DICTS.drag_stop
-            anim = ANIM_CLIPS.drag_stop
-        end
-    else
-        dict = ANIM_DICTS.escort_stop
-        anim = ANIM_CLIPS.escort_stop
-    end
-    
+    local dict = ANIM_DICTS.escort_stop
+    local anim = ANIM_CLIPS.escort_stop
+
     -- Play stop/release animation
     local success = playAnimation(
         ped, 
@@ -344,28 +284,20 @@ end
 -- TARGET SELECTION
 -- =============================================================================
 
-local function getTargetByMode(mode)
+local function getEscortTarget()
     local closestPlayer, distance = Framework.Client.GetClosestPlayer(Config.MaxEscortDistance)
     if closestPlayer == -1 or distance > Config.MaxEscortDistance then
         Framework.Debug('No nearby player in range')
         notify('No nearby player in range', 'error')
         return nil
     end
-
     local isDead = Framework.Client.IsPlayerDead(closestPlayer)
-    if mode == 'carry' and not isDead then
-        Framework.Debug('Carry requires a dead player target')
-        notify('Carry requires a dead player target', 'error')
-        return nil
-    end
-
-    if mode == 'escort' and isDead then
-        Framework.Debug('Escort requires a living player target')
+    if isDead then
         notify('Escort requires a living player target', 'error')
         return nil
     end
 
-    return closestPlayer, isDead
+    return closestPlayer
 end
 
 local function getNearestTargetServerId(requireEscortedState)
@@ -386,9 +318,9 @@ end
 -- ESCORT REQUEST HANDLING
 -- =============================================================================
 
-local function requestStart(mode)
+local function requestStart()
     if isEscorting or isBeingEscorted then
-        notify('You are already in an escort/carry state', 'error')
+        notify('You are already in an escort state', 'error')
         return
     end
 
@@ -396,25 +328,19 @@ local function requestStart(mode)
         return
     end
 
-    local targetPlayer, isDead = getTargetByMode(mode)
+    local targetPlayer = getEscortTarget()
     if not targetPlayer then
         return
     end
 
-    if isDead and not Config.AllowCarryDead then
-        Framework.Debug('Carrying dead players is disabled')
-        notify('Carrying dead players is disabled', 'error')
-        return
-    end
-
-    if not isDead and not Config.AllowEscortAlive then
+    if not Config.AllowEscortAlive then
         Framework.Debug('Escorting alive players is disabled')
         notify('Escorting alive players is disabled', 'error')
         return
     end
 
     local targetServerId = GetPlayerServerId(targetPlayer)
-    TriggerServerEvent('escort:requestAction', targetServerId, mode)
+    TriggerServerEvent('escort:requestAction', targetServerId, 'escort')
     stampCooldown()
 end
 
@@ -459,11 +385,11 @@ local function getKnownStopTargetServerId()
     return nil
 end
 
-local function toggleMode(mode)
+local function toggleEscort()
     if isEscorting or isBeingEscorted then
         requestStop(getKnownStopTargetServerId())
     else
-        requestStart(mode)
+        requestStart()
     end
 end
 
@@ -489,11 +415,7 @@ end
 -- =============================================================================
 
 RegisterCommand('escort', function()
-    toggleMode('escort')
-end, false)
-
-RegisterCommand('carry', function()
-    toggleMode('carry')
+    toggleEscort()
 end, false)
 
 RegisterCommand('unescort', function()
@@ -510,8 +432,7 @@ RegisterCommand('takeoutvehicle', function()
 end, false)
 
 RegisterKeyMapping('escort', 'Toggle Escort Player (alive target)', 'keyboard', Config.DefaultEscortKey or Config.DefaultKey or 'H')
-RegisterKeyMapping('carry', 'Toggle Carry Player (dead target)', 'keyboard', Config.DefaultCarryKey or 'G')
-RegisterKeyMapping('unescort', 'Stop escort/carry (self, target, or escorter)', 'keyboard', Config.DefaultUnescortKey or 'U')
+RegisterKeyMapping('unescort', 'Stop escort (self, target, or escorter)', 'keyboard', Config.DefaultUnescortKey or 'U')
 RegisterKeyMapping('putinvehicle', 'Put nearby escorted player in nearest vehicle', 'keyboard', Config.DefaultPutInVehicleKey or 'J')
 RegisterKeyMapping('takeoutvehicle', 'Take escorted player out of vehicle', 'keyboard', Config.DefaultTakeOutVehicleKey or 'K')
 
@@ -528,7 +449,7 @@ if Config.UseTarget then
                 {
                     name = 'escort_player',
                     icon = 'fa-solid fa-user-group',
-                    label = 'Escort/Carry',
+                    label = 'Escort',
                     distance = Config.MaxEscortDistance,
                     onSelect = function(data)
                         local targetId = NetworkGetPlayerIndexFromPed(data.entity)
@@ -548,18 +469,17 @@ if Config.UseTarget then
                         end
 
                         local targetDeadState = IsPedDeadOrDying(data.entity, true) or IsEntityDead(data.entity)
-                        if targetDeadState and not Config.AllowCarryDead then
-                            notify('Carrying dead players is disabled', 'error')
+                        if targetDeadState then
+                            notify('Escort requires a living player target', 'error')
                             return
                         end
 
-                        if (not targetDeadState) and not Config.AllowEscortAlive then
+                        if not Config.AllowEscortAlive then
                             notify('Escorting alive players is disabled', 'error')
                             return
                         end
 
-                        local mode = targetDeadState and 'carry' or 'escort'
-                        TriggerServerEvent('escort:requestAction', targetServerId, mode)
+                        TriggerServerEvent('escort:requestAction', targetServerId, 'escort')
                         stampCooldown()
                     end,
                     canInteract = function()
@@ -640,12 +560,11 @@ RegisterNetEvent('escort:start', function(targetId)
         return
     end
 
-    targetIsDead = IsPedDeadOrDying(targetPed, true) or IsEntityDead(targetPed)
     escortedPlayer = targetPlayer
     isEscorting = true
     stopRequestPending = false
 
-    playEscortStartAnimation(PlayerPedId(), targetIsDead, Config.CarryOnShoulder)
+    playEscortStartAnimation(PlayerPedId())
 
     Framework.Debug('Started escorting player: ' .. targetId)
 
@@ -664,7 +583,7 @@ RegisterNetEvent('escort:start', function(targetId)
             end
 
             if animationActive then
-                playEscortWalkAnimation(myPed, targetIsDead, Config.CarryOnShoulder)
+                playEscortWalkAnimation(myPed)
             end
         end
     end)
@@ -682,13 +601,6 @@ RegisterNetEvent('escort:beingEscorted', function(escorterId)
     stopRequestPending = false
 
     local myPed = PlayerPedId()
-    local isDead = IsPedDeadOrDying(myPed, true) or IsEntityDead(myPed)
-
-    -- Set ragdoll for dead players
-    if isDead then
-        SetPedToRagdoll(myPed, Config.RagdollDuration or 60000, Config.RagdollDuration or 60000, false, false, false, false)
-    end
-
     -- Main escort loop
     CreateThread(function()
         while isBeingEscorted do
@@ -703,19 +615,10 @@ RegisterNetEvent('escort:beingEscorted', function(escorterId)
             end
 
             if not IsEntityAttachedToEntity(me, escorterPed) then
-                -- Set ragdoll for dead players
-                if isDead then
-                    SetPedToRagdoll(me, Config.RagdollDuration or 60000, Config.RagdollDuration or 60000, false, false, false, false)
-
-                    if Config.CarryOnShoulder then
-                        AttachEntityToEntity(me, escorterPed, 11816, 0.5, 0.5, 0.0, 305.28, 161.04, 0.0, false, false, false, false, 2, true)
-                    else
-                        AttachEntityToEntity(me, escorterPed, 11816, 0.30, 0.30, 0.0, 0.0, 0.0, 0.0, false, false, false, false, 2, true)
-                    end
-                else
-                    AttachEntityToEntity(me, escorterPed, 11816, 0.54, 0.54, 0.0, 0.0, 0.0, 0.0, false, false, false, false, 2, true)
-                    playEscortedAliveAnimation(me)
-                end
+                AttachEntityToEntity(me, escorterPed, 11816, 0.35, 0.45, 0.0, 0.0, 0.0, 15.0, false, false, false, false, 2, true)
+                playEscortedAliveAnimation(me)
+            elseif not IsEntityPlayingAnim(me, ANIM_DICTS.escorted_loop, ANIM_CLIPS.escorted_loop, 3) then
+                playEscortedAliveAnimation(me)
             end
         end
     end)
@@ -784,7 +687,7 @@ RegisterNetEvent('escort:vehicle', function(action)
     end
 end)
 
--- Event: Stop escort/carry - ENHANCED WITH STOP ANIMATION
+-- Event: Stop escort - ENHANCED WITH STOP ANIMATION
 RegisterNetEvent('escort:stop', function()
     stopRequestPending = false
 
@@ -793,13 +696,10 @@ RegisterNetEvent('escort:stop', function()
     -- Handle escorter side
     if isEscorting and escortedPlayer then
         local targetPed = GetPlayerPed(escortedPlayer)
-        playEscortStopAnimation(myPed, targetIsDead, Config.CarryOnShoulder)
+        playEscortStopAnimation(myPed)
 
         if DoesEntityExist(targetPed) then
             DetachEntity(targetPed, true, false)
-            if targetIsDead then
-                StopPedRagdoll(targetPed)
-            end
             ClearPedTasksImmediately(targetPed)
         end
     end
@@ -808,7 +708,6 @@ RegisterNetEvent('escort:stop', function()
     if isBeingEscorted then
         if DoesEntityExist(myPed) then
             DetachEntity(myPed, true, false)
-            StopPedRagdoll(myPed)
             stopEscortedAnimation(myPed)
             ClearPedTasksImmediately(myPed)
         end
@@ -819,14 +718,12 @@ RegisterNetEvent('escort:stop', function()
     escortedPlayer = nil
     isBeingEscorted = false
     escortedBy = nil
-    targetIsDead = false
-    
     -- Reset animation state
     animationActive = false
     animationDictionary = nil
     escortedAnimationDictionary = nil
     
-    Framework.Debug('Escort/carry stopped')
+    Framework.Debug('Escort stopped')
 end)
 
 -- Event: Notification
@@ -839,10 +736,9 @@ end)
 -- =============================================================================
 
 TriggerEvent('chat:addSuggestion', '/escort', 'Escort or release a nearby living player')
-TriggerEvent('chat:addSuggestion', '/carry', 'Carry or release a nearby dead player')
-TriggerEvent('chat:addSuggestion', '/unescort', 'Force stop escort/carry (works for escorter or target)')
-TriggerEvent('chat:addSuggestion', '/putinvehicle', 'Put nearby escorted/carry target into nearest vehicle')
-TriggerEvent('chat:addSuggestion', '/takeoutvehicle', 'Take nearby escorted/carry target out of vehicle')
+TriggerEvent('chat:addSuggestion', '/unescort', 'Force stop escort (works for escorter or target)')
+TriggerEvent('chat:addSuggestion', '/putinvehicle', 'Put nearby escorted target into nearest vehicle')
+TriggerEvent('chat:addSuggestion', '/takeoutvehicle', 'Take nearby escorted target out of vehicle')
 
 -- =============================================================================
 -- RESOURCE STOP HANDLER - CLEANUP ANIMATIONS
@@ -860,9 +756,6 @@ AddEventHandler('onResourceStop', function(resourceName)
         local targetPed = GetPlayerPed(escortedPlayer)
         if DoesEntityExist(targetPed) then
             DetachEntity(targetPed, true, false)
-            if targetIsDead then
-                StopPedRagdoll(targetPed)
-            end
             ClearPedTasksImmediately(targetPed)
             
             -- Stop any active animations
@@ -876,7 +769,6 @@ AddEventHandler('onResourceStop', function(resourceName)
     if isBeingEscorted then
         if DoesEntityExist(myPed) then
             DetachEntity(myPed, true, false)
-            StopPedRagdoll(myPed)
             stopEscortedAnimation(myPed)
             ClearPedTasksImmediately(myPed)
             
@@ -898,7 +790,6 @@ RegisterCommand('escortdebug', function()
     print('Escorted Player: ' .. tostring(escortedPlayer))
     print('Is Being Escorted: ' .. tostring(isBeingEscorted))
     print('Escorted By: ' .. tostring(escortedBy))
-    print('Target Is Dead: ' .. tostring(targetIsDead))
     print('Last Action Time: ' .. tostring(lastActionTime))
     print('Animation Active: ' .. tostring(animationActive))
     print('Animation Dictionary: ' .. tostring(animationDictionary))
