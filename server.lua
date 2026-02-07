@@ -1,125 +1,135 @@
--- Cooldown tracking: {playerId = {lastTime = timestamp}}
 local escortCooldowns = {}
-local escortStates = {} -- Track who is escorting whom
+local escortStates = {} -- [escorter] = target
 
-RegisterNetEvent('escort:requestEscort', function(targetId)
-    local src = source
-    
-    Framework.Debug('Request received from source: ' .. tostring(src) .. ' for target: ' .. tostring(targetId))
-    
-    -- Validation using bridge
+local function getCooldownMs()
+    return Config.ActionCooldown or Config.EscortCooldown or 5000
+end
+
+local function isOnCooldown(playerId)
+    local lastTime = escortCooldowns[playerId]
+    if not lastTime then
+        return false
+    end
+
+    return (GetGameTimer() - lastTime) < getCooldownMs()
+end
+
+local function stampCooldown(playerId)
+    escortCooldowns[playerId] = GetGameTimer()
+end
+
+local function getEscorterForTarget(targetId)
+    for escorter, target in pairs(escortStates) do
+        if target == targetId then
+            return escorter
+        end
+    end
+    return nil
+end
+
+local function handleRequest(src, targetId, mode)
+    mode = mode == 'carry' and 'carry' or 'escort'
+
     if not targetId or targetId == src then
-        Framework.Debug('Invalid target ID (same as source or nil)')
         return
     end
-    
-    -- Check if both players exist using bridge
-    if not Framework.Server.PlayerExists(src) then
-        Framework.Debug('Source player does not exist or is offline')
+
+    if not Framework.Server.PlayerExists(src) or not Framework.Server.PlayerExists(targetId) then
         return
     end
-    
-    if not Framework.Server.PlayerExists(targetId) then
-        Framework.Debug('Target player does not exist or is offline')
+
+    if isOnCooldown(src) or isOnCooldown(targetId) then
+        Framework.Debug(('Cooldown blocked action between %s and %s'):format(src, targetId))
         return
     end
-    
-    -- Check cooldown
-    if escortCooldowns[src] and (GetGameTimer() - escortCooldowns[src]) < Config.EscortCooldown then
-        Framework.Debug('Source player is on cooldown')
-        return
-    end
-    
-    -- Prevent escorting while already escorting
+
     if escortStates[src] then
-        Framework.Debug('Source player is already escorting someone')
         return
     end
-    
-    -- Prevent escorting someone who is currently being escorted
-    if escortStates[targetId] then
-        Framework.Debug('Target is already being escorted')
+
+    if escortStates[targetId] or getEscorterForTarget(src) or getEscorterForTarget(targetId) then
         return
     end
-    
-    -- Prevent being escorted while escorting
-    for playerId, targetPlayer in pairs(escortStates) do
-        if targetPlayer == src then
-            Framework.Debug('Source player is currently being escorted')
+
+    escortStates[src] = targetId
+    stampCooldown(src)
+    stampCooldown(targetId)
+
+    TriggerClientEvent('escort:start', src, targetId)
+    TriggerClientEvent('escort:beingEscorted', targetId, src)
+
+    local srcName = Framework.Server.GetPlayerName(src)
+    local targetName = Framework.Server.GetPlayerName(targetId)
+    Framework.Server.Log(('%s (ID: %s) started %s on %s (ID: %s)'):format(srcName, src, mode, targetName, targetId), 'info')
+end
+
+local function handleStop(src, targetId)
+
+    local expectedTarget = escortStates[src]
+    if expectedTarget and (not targetId or targetId == expectedTarget) then
+        targetId = expectedTarget
+    else
+        local escorter = getEscorterForTarget(src)
+        if escorter then
+            targetId = src
+            src = escorter
+        else
             return
         end
     end
-    
-    -- Set cooldown
-    escortCooldowns[src] = GetGameTimer()
-    
-    -- Track the escort state
-    escortStates[src] = targetId
-    
-    -- Trigger escort for both players
-    Framework.Debug('Triggering escort:start for source: ' .. tostring(src))
-    TriggerClientEvent('escort:start', src, targetId)
-    
-    Framework.Debug('Triggering escort:beingEscorted for target: ' .. tostring(targetId))
-    TriggerClientEvent('escort:beingEscorted', targetId, src)
-    
-    -- Log the action using bridge
+
+    escortStates[src] = nil
+    stampCooldown(src)
+    if targetId then
+        stampCooldown(targetId)
+    end
+
+    TriggerClientEvent('escort:stop', src)
+    if targetId and Framework.Server.PlayerExists(targetId) then
+        TriggerClientEvent('escort:stop', targetId)
+    end
+
     local srcName = Framework.Server.GetPlayerName(src)
-    local targetName = Framework.Server.GetPlayerName(targetId)
-    Framework.Server.Log(string.format('%s (ID: %s) is escorting %s (ID: %s)', srcName, src, targetName, targetId), 'info')
+    Framework.Server.Log(('%s (ID: %s) stopped escort/carry'):format(srcName, src), 'info')
+end
+
+RegisterNetEvent('escort:requestAction', function(targetId, mode)
+    handleRequest(source, targetId, mode)
+end)
+
+RegisterNetEvent('escort:stopAction', function(targetId)
+    handleStop(source, targetId)
+end)
+
+-- Backwards compatibility with older clients
+RegisterNetEvent('escort:requestEscort', function(targetId)
+    handleRequest(source, targetId, 'escort')
 end)
 
 RegisterNetEvent('escort:stopEscort', function(targetId)
-    local src = source
-    
-    Framework.Debug('Stop request from source: ' .. tostring(src))
-    
-    -- Verify this player is actually escorting the target
-    if not escortStates[src] or escortStates[src] ~= targetId then
-        Framework.Debug('Player is not escorting this target')
-        return
-    end
-    
-    -- Set cooldown
-    escortCooldowns[src] = GetGameTimer()
-    
-    -- Clear escort state
-    escortStates[src] = nil
-    
-    -- Stop escort for both players
-    TriggerClientEvent('escort:stop', src)
-    
-    if targetId and Framework.Server.PlayerExists(targetId) then
-        Framework.Debug('Stopping escort for target: ' .. tostring(targetId))
-        TriggerClientEvent('escort:stop', targetId)
-    end
-    
-    -- Log the action using bridge
-    local srcName = Framework.Server.GetPlayerName(src)
-    Framework.Server.Log(string.format('%s (ID: %s) stopped escorting', srcName, src), 'info')
+    handleStop(source, targetId)
 end)
 
--- Clean up escort states when player leaves
-AddEventHandler('playerDropped', function(reason)
+AddEventHandler('playerDropped', function()
     local src = source
     escortCooldowns[src] = nil
-    
-    -- If they were escorting someone, stop that too
+
     if escortStates[src] then
         local targetId = escortStates[src]
         escortStates[src] = nil
+
         if Framework.Server.PlayerExists(targetId) then
             TriggerClientEvent('escort:stop', targetId)
         end
     end
-    
-    -- If they were being escorted, stop that
-    for playerId, targetPlayer in pairs(escortStates) do
-        if targetPlayer == src then
-            escortStates[playerId] = nil
-            if Framework.Server.PlayerExists(playerId) then
-                TriggerClientEvent('escort:stop', playerId)
+
+    for escorter, target in pairs(escortStates) do
+        if target == src then
+            escortStates[escorter] = nil
+            if Framework.Server.PlayerExists(escorter) then
+                TriggerClientEvent('escort:stop', escorter)
             end
+            break
         end
     end
 end)
