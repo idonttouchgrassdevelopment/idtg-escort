@@ -103,12 +103,17 @@ local function handleStop(src, targetId)
             targetId = src
             src = escorter
         elseif targetId then
-            local reverseEscorter = getEscorterForTarget(targetId)
-            if reverseEscorter and (reverseEscorter == src or targetId == src or targetId == escortStates[src]) then
-                src = reverseEscorter
-                targetId = escortStates[reverseEscorter]
+            if escortStates[targetId] == src then
+                src = targetId
+                targetId = escortStates[targetId]
             else
-                return
+                local reverseEscorter = getEscorterForTarget(targetId)
+                if reverseEscorter and (reverseEscorter == src or targetId == src or targetId == escortStates[src]) then
+                    src = reverseEscorter
+                    targetId = escortStates[reverseEscorter]
+                else
+                    return
+                end
             end
         else
             return
@@ -165,6 +170,7 @@ local function handleVehicleAction(src, targetId, action)
     end
 
     TriggerClientEvent('escort:vehicle', targetId, action)
+    TriggerClientEvent('escort:vehicleAnimation', src, action)
     stampCooldown(src)
 
     if action == 'putin' then
