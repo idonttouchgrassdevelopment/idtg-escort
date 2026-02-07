@@ -18,3 +18,21 @@ Config.AllowEscortAlive = true -- Allow escorting alive players
 
 -- Framework Options: 'qbox', 'qbcore', 'esx', 'standalone'
 Config.Framework = 'auto' -- 'auto' will detect automatically
+
+-- Animation Options
+Config.Animations = {
+    Escort = {
+        Start = { dict = 'random@arrests', clip = 'generic_radio_enter', flag = 49, duration = 1000, blendIn = 0.5, blendOut = 0.3 },
+        Walk = { dict = 'random@arrests', clip = 'generic_radio_chatter', flag = 49, duration = -1, blendIn = 0.3, blendOut = 0.3 },
+        Stop = { dict = 'random@arrests', clip = 'generic_radio_enter', flag = 49, duration = 1500, blendIn = 0.2, blendOut = 0.5 },
+        EscortedLoop = { dict = 'random@arrests@busted', clip = 'idle_a', flag = 33, duration = -1, blendIn = 0.2, blendOut = 0.2 }
+    },
+    Vehicle = {
+        EscorterPutIn = { dict = 'random@arrests', clip = 'generic_radio_enter', flag = 49, duration = 1200, blendIn = 0.2, blendOut = 0.2 },
+        EscorterTakeOut = { dict = 'random@arrests', clip = 'generic_radio_chatter', flag = 49, duration = 1200, blendIn = 0.2, blendOut = 0.2 },
+        TargetPutIn = { dict = 'random@arrests@busted', clip = 'idle_a', flag = 33, duration = 1200, blendIn = 0.2, blendOut = 0.2 },
+        TargetTakeOut = { dict = 'random@arrests@busted', clip = 'idle_a', flag = 33, duration = 1000, blendIn = 0.2, blendOut = 0.2 },
+        EnterDelayMs = 1200,
+        ExitDelayMs = 1000
+    }
+}

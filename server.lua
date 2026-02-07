@@ -136,7 +136,7 @@ local function handleStop(src, targetId)
     Framework.Server.Log(('%s (ID: %s) stopped escort'):format(srcName, escorter), 'info')
 end
 
-local function handleVehicleAction(src, targetId, action)
+local function handleVehicleAction(src, targetId, action, vehicleNetId)
     action = action == 'takeout' and 'takeout' or 'putin'
 
     if not targetId or targetId == src then
@@ -166,7 +166,7 @@ local function handleVehicleAction(src, targetId, action)
         return
     end
 
-    TriggerClientEvent('escort:vehicle', targetId, action)
+    TriggerClientEvent('escort:vehicle', targetId, action, vehicleNetId)
     TriggerClientEvent('escort:vehicleAnimation', src, action)
     stampCooldown(src)
 
@@ -187,8 +187,8 @@ RegisterNetEvent('escort:stopAction', function(targetId)
     handleStop(source, targetId)
 end)
 
-RegisterNetEvent('escort:vehicleAction', function(targetId, action)
-    handleVehicleAction(source, targetId, action)
+RegisterNetEvent('escort:vehicleAction', function(targetId, action, vehicleNetId)
+    handleVehicleAction(source, targetId, action, vehicleNetId)
 end)
 
 -- Backwards compatibility with older clients
