@@ -181,7 +181,7 @@ RegisterNetEvent('escort:start', function(targetId)
 
     CreateThread(function()
         while isEscorting do
-            Wait(0)
+            Wait(500)
 
             local myPed = PlayerPedId()
             local ped = GetPlayerPed(escortedPlayer)
@@ -190,23 +190,6 @@ RegisterNetEvent('escort:start', function(targetId)
                     TriggerServerEvent('escort:stopAction', GetPlayerServerId(escortedPlayer))
                 end
                 break
-            end
-
-            local isNowDead = IsPedDeadOrDying(ped, true) or IsEntityDead(ped)
-            if isNowDead then
-                if not IsEntityAttachedToEntity(ped, myPed) then
-                    SetPedToRagdoll(ped, Config.RagdollDuration or 60000, Config.RagdollDuration or 60000, false, false, false, false)
-
-                    if Config.CarryOnShoulder then
-                        AttachEntityToEntity(ped, myPed, 11816, 0.5, 0.5, 0.0, 305.28, 161.04, 0.0, false, false, false, false, 2, true)
-                    else
-                        AttachEntityToEntity(ped, myPed, 11816, 0.30, 0.30, 0.0, 0.0, 0.0, 0.0, false, false, false, false, 2, true)
-                    end
-                end
-            else
-                if not IsEntityAttachedToEntity(ped, myPed) then
-                    AttachEntityToEntity(ped, myPed, 11816, 0.54, 0.54, 0.0, 0.0, 0.0, 0.0, false, false, false, false, 2, true)
-                end
             end
         end
     end)
@@ -225,6 +208,35 @@ RegisterNetEvent('escort:beingEscorted', function(escorterId)
     if IsPedDeadOrDying(myPed, true) or IsEntityDead(myPed) then
         SetPedToRagdoll(myPed, Config.RagdollDuration or 60000, Config.RagdollDuration or 60000, false, false, false, false)
     end
+
+    CreateThread(function()
+        while isBeingEscorted do
+            Wait(0)
+
+            local escorterPed = GetPlayerPed(escortedBy)
+            local me = PlayerPedId()
+
+            if not DoesEntityExist(escorterPed) or not DoesEntityExist(me) then
+                TriggerServerEvent('escort:stopAction')
+                break
+            end
+
+            if not IsEntityAttachedToEntity(me, escorterPed) then
+                local dead = IsPedDeadOrDying(me, true) or IsEntityDead(me)
+                if dead then
+                    SetPedToRagdoll(me, Config.RagdollDuration or 60000, Config.RagdollDuration or 60000, false, false, false, false)
+
+                    if Config.CarryOnShoulder then
+                        AttachEntityToEntity(me, escorterPed, 11816, 0.5, 0.5, 0.0, 305.28, 161.04, 0.0, false, false, false, false, 2, true)
+                    else
+                        AttachEntityToEntity(me, escorterPed, 11816, 0.30, 0.30, 0.0, 0.0, 0.0, 0.0, false, false, false, false, 2, true)
+                    end
+                else
+                    AttachEntityToEntity(me, escorterPed, 11816, 0.54, 0.54, 0.0, 0.0, 0.0, 0.0, false, false, false, false, 2, true)
+                end
+            end
+        end
+    end)
 end)
 
 RegisterNetEvent('escort:stop', function()
