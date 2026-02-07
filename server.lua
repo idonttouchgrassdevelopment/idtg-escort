@@ -24,7 +24,24 @@ local function getEscorterForTarget(targetId)
             return escorter
         end
     end
+
     return nil
+end
+
+local function areNearby(src, targetId)
+    local srcPed = GetPlayerPed(src)
+    local targetPed = GetPlayerPed(targetId)
+    if srcPed == 0 or targetPed == 0 then
+        return false
+    end
+
+    local srcCoords = GetEntityCoords(srcPed)
+    local targetCoords = GetEntityCoords(targetPed)
+    return #(srcCoords - targetCoords) <= (Config.MaxEscortDistance + 1.0)
+end
+
+local function notifyPlayer(playerId, message, messageType)
+    TriggerClientEvent('escort:notify', playerId, message, messageType or 'inform', Config.NotifyDuration or 5000)
 end
 
 local function handleRequest(src, targetId, mode)
@@ -38,16 +55,24 @@ local function handleRequest(src, targetId, mode)
         return
     end
 
+    if not areNearby(src, targetId) then
+        notifyPlayer(src, 'Target is too far away', 'error')
+        return
+    end
+
     if isOnCooldown(src) or isOnCooldown(targetId) then
         Framework.Debug(('Cooldown blocked action between %s and %s'):format(src, targetId))
+        notifyPlayer(src, 'Action is on cooldown', 'error')
         return
     end
 
     if escortStates[src] then
+        notifyPlayer(src, 'You are already escorting someone', 'error')
         return
     end
 
     if escortStates[targetId] or getEscorterForTarget(src) or getEscorterForTarget(targetId) then
+        notifyPlayer(src, 'Either you or the target is already busy', 'error')
         return
     end
 
@@ -58,12 +83,16 @@ local function handleRequest(src, targetId, mode)
     TriggerClientEvent('escort:start', src, targetId)
     TriggerClientEvent('escort:beingEscorted', targetId, src)
 
+    notifyPlayer(src, ('You started %s on ID %s'):format(mode, targetId), 'success')
+    notifyPlayer(targetId, ('You are being %sed by ID %s'):format(mode, src), 'inform')
+
     local srcName = Framework.Server.GetPlayerName(src)
     local targetName = Framework.Server.GetPlayerName(targetId)
     Framework.Server.Log(('%s (ID: %s) started %s on %s (ID: %s)'):format(srcName, src, mode, targetName, targetId), 'info')
 end
 
 local function handleStop(src, targetId)
+    local originalSource = src
 
     local expectedTarget = escortStates[src]
     if expectedTarget and (not targetId or targetId == expectedTarget) then
@@ -73,6 +102,14 @@ local function handleStop(src, targetId)
         if escorter then
             targetId = src
             src = escorter
+        elseif targetId then
+            local reverseEscorter = getEscorterForTarget(targetId)
+            if reverseEscorter and (reverseEscorter == src or targetId == src or targetId == escortStates[src]) then
+                src = reverseEscorter
+                targetId = escortStates[reverseEscorter]
+            else
+                return
+            end
         else
             return
         end
@@ -89,8 +126,54 @@ local function handleStop(src, targetId)
         TriggerClientEvent('escort:stop', targetId)
     end
 
+    if Framework.Server.PlayerExists(originalSource) then
+        notifyPlayer(originalSource, 'Escort/carry stopped', 'success')
+    end
+
     local srcName = Framework.Server.GetPlayerName(src)
     Framework.Server.Log(('%s (ID: %s) stopped escort/carry'):format(srcName, src), 'info')
+end
+
+local function handleVehicleAction(src, targetId, action)
+    action = action == 'takeout' and 'takeout' or 'putin'
+
+    if not targetId or targetId == src then
+        return
+    end
+
+    if not Framework.Server.PlayerExists(src) or not Framework.Server.PlayerExists(targetId) then
+        return
+    end
+
+    if isOnCooldown(src) then
+        notifyPlayer(src, 'Action is on cooldown', 'error')
+        return
+    end
+
+    local expectedTarget = escortStates[src]
+    local escorter = getEscorterForTarget(src)
+    local isValidPair = (expectedTarget and expectedTarget == targetId) or (escorter and escorter == targetId)
+
+    if not isValidPair then
+        notifyPlayer(src, 'You must escort/carry this player first', 'error')
+        return
+    end
+
+    if not areNearby(src, targetId) then
+        notifyPlayer(src, 'Target is too far away', 'error')
+        return
+    end
+
+    TriggerClientEvent('escort:vehicle', targetId, action)
+    stampCooldown(src)
+
+    if action == 'putin' then
+        notifyPlayer(src, 'Attempting to place target in vehicle', 'success')
+        notifyPlayer(targetId, 'You are being put in a vehicle', 'inform')
+    else
+        notifyPlayer(src, 'Attempting to remove target from vehicle', 'success')
+        notifyPlayer(targetId, 'You are being taken out of a vehicle', 'inform')
+    end
 end
 
 RegisterNetEvent('escort:requestAction', function(targetId, mode)
@@ -99,6 +182,10 @@ end)
 
 RegisterNetEvent('escort:stopAction', function(targetId)
     handleStop(source, targetId)
+end)
+
+RegisterNetEvent('escort:vehicleAction', function(targetId, action)
+    handleVehicleAction(source, targetId, action)
 end)
 
 -- Backwards compatibility with older clients

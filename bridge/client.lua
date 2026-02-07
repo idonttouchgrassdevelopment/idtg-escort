@@ -86,7 +86,34 @@ end
 
 -- Notification function (optional, returns false if no notification shown)
 function Framework.Client.Notify(message, type, duration)
-    -- This is intentionally left empty as per user request
-    -- Can be enabled later if needed
-    return false
+    message = tostring(message or '')
+    if message == '' then
+        return false
+    end
+
+    type = type or 'inform'
+    duration = duration or 5000
+
+    if Framework.Name == 'qbox' and Framework.Client.Core and Framework.Client.Core.Notify then
+        Framework.Client.Core:Notify(message, type, duration)
+        return true
+    end
+
+    if Framework.Name == 'qbcore' and Framework.Client.Core and Framework.Client.Core.Functions and Framework.Client.Core.Functions.Notify then
+        local qbType = type == 'error' and 'error' or (type == 'success' and 'success' or 'primary')
+        Framework.Client.Core.Functions.Notify(message, qbType, duration)
+        return true
+    end
+
+    if Framework.Name == 'esx' then
+        TriggerEvent('esx:showNotification', message)
+        return true
+    end
+
+    TriggerEvent('chat:addMessage', {
+        color = type == 'error' and { 255, 80, 80 } or { 80, 180, 255 },
+        multiline = false,
+        args = { 'Escort', message }
+    })
+    return true
 end
