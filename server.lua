@@ -44,8 +44,7 @@ local function notifyPlayer(playerId, message, messageType)
     TriggerClientEvent('escort:notify', playerId, message, messageType or 'inform', Config.NotifyDuration or 5000)
 end
 
-local function handleRequest(src, targetId, mode)
-    mode = mode == 'carry' and 'carry' or 'escort'
+local function handleRequest(src, targetId)
 
     if not targetId or targetId == src then
         return
@@ -83,12 +82,12 @@ local function handleRequest(src, targetId, mode)
     TriggerClientEvent('escort:start', src, targetId)
     TriggerClientEvent('escort:beingEscorted', targetId, src)
 
-    notifyPlayer(src, ('You started %s on ID %s'):format(mode, targetId), 'success')
-    notifyPlayer(targetId, ('You are being %sed by ID %s'):format(mode, src), 'inform')
+    notifyPlayer(src, ('You started escort on ID %s'):format(targetId), 'success')
+    notifyPlayer(targetId, ('You are being escorted by ID %s'):format(src), 'inform')
 
     local srcName = Framework.Server.GetPlayerName(src)
     local targetName = Framework.Server.GetPlayerName(targetId)
-    Framework.Server.Log(('%s (ID: %s) started %s on %s (ID: %s)'):format(srcName, src, mode, targetName, targetId), 'info')
+    Framework.Server.Log(('%s (ID: %s) started escort on %s (ID: %s)'):format(srcName, src, targetName, targetId), 'info')
 end
 
 local function handleStop(src, targetId)
@@ -127,11 +126,11 @@ local function handleStop(src, targetId)
     end
 
     if Framework.Server.PlayerExists(originalSource) then
-        notifyPlayer(originalSource, 'Escort/carry stopped', 'success')
+        notifyPlayer(originalSource, 'Escort stopped', 'success')
     end
 
     local srcName = Framework.Server.GetPlayerName(src)
-    Framework.Server.Log(('%s (ID: %s) stopped escort/carry'):format(srcName, src), 'info')
+    Framework.Server.Log(('%s (ID: %s) stopped escort'):format(srcName, src), 'info')
 end
 
 local function handleVehicleAction(src, targetId, action)
@@ -155,7 +154,7 @@ local function handleVehicleAction(src, targetId, action)
     local isValidPair = (expectedTarget and expectedTarget == targetId) or (escorter and escorter == targetId)
 
     if not isValidPair then
-        notifyPlayer(src, 'You must escort/carry this player first', 'error')
+        notifyPlayer(src, 'You must escort this player first', 'error')
         return
     end
 
@@ -176,8 +175,8 @@ local function handleVehicleAction(src, targetId, action)
     end
 end
 
-RegisterNetEvent('escort:requestAction', function(targetId, mode)
-    handleRequest(source, targetId, mode)
+RegisterNetEvent('escort:requestAction', function(targetId)
+    handleRequest(source, targetId)
 end)
 
 RegisterNetEvent('escort:stopAction', function(targetId)
