@@ -160,14 +160,14 @@ end
 -- =============================================================================
 
 -- Play start animation when escort begins
-local function playEscortStartAnimation(escorterPed, targetPed, isDead, isShoulder)
-    if not DoesEntityExist(escorterPed) or not DoesEntityExist(targetPed) then
-        Framework.Debug("Cannot play start animation - invalid peds")
+local function playEscortStartAnimation(actorPed, isDead, isShoulder)
+    if not DoesEntityExist(actorPed) then
+        Framework.Debug("Cannot play start animation - invalid ped")
         return false
     end
     
     -- Select appropriate animation based on state
-    local dict, anim, escorterAnim
+    local dict, anim
     
     if isDead then
         if isShoulder then
@@ -184,9 +184,9 @@ local function playEscortStartAnimation(escorterPed, targetPed, isDead, isShould
     
     animationDictionary = dict
     
-    -- Play animation on the target (escorted person)
+    -- Play animation on the actor (escorter/carrying player)
     local success = playAnimation(
-        targetPed, 
+        actorPed,
         dict, 
         anim, 
         49, -- Flag: allow movement + upper body
@@ -198,10 +198,7 @@ local function playEscortStartAnimation(escorterPed, targetPed, isDead, isShould
     if success then
         animationActive = true
         Framework.Debug("Started escort animation: " .. dict .. " @ " .. anim)
-        
-        -- Clear tasks for escorter to prepare for synchronized movement
-        ClearPedTasks(escorterPed)
-        
+
         return true
     end
     
@@ -401,8 +398,18 @@ local function requestStop(targetServerId)
         return
     end
 
+    if not isEscorting and not isBeingEscorted then
+        notify('You are not escorting anyone', 'error')
+        return
+    end
+
     stopRequestPending = true
     TriggerServerEvent('escort:stopAction', targetServerId)
+
+    CreateThread(function()
+        Wait(2000)
+        stopRequestPending = false
+    end)
 end
 
 local function getKnownStopTargetServerId()
@@ -611,6 +618,9 @@ RegisterNetEvent('escort:start', function(targetId)
     targetIsDead = IsPedDeadOrDying(targetPed, true) or IsEntityDead(targetPed)
     escortedPlayer = targetPlayer
     isEscorting = true
+    stopRequestPending = false
+
+    playEscortStartAnimation(PlayerPedId(), targetIsDead, Config.CarryOnShoulder)
 
     Framework.Debug('Started escorting player: ' .. targetId)
 
@@ -627,6 +637,10 @@ RegisterNetEvent('escort:start', function(targetId)
                 end
                 break
             end
+
+            if animationActive then
+                playEscortWalkAnimation(myPed, targetIsDead, Config.CarryOnShoulder)
+            end
         end
     end)
 end)
@@ -640,21 +654,17 @@ RegisterNetEvent('escort:beingEscorted', function(escorterId)
 
     escortedBy = escorterPlayer
     isBeingEscorted = true
+    stopRequestPending = false
 
     local myPed = PlayerPedId()
-    local escorterPed = GetPlayerPed(escortedBy)
     local isDead = IsPedDeadOrDying(myPed, true) or IsEntityDead(myPed)
-    local isShoulder = Config.CarryOnShoulder
 
     -- Set ragdoll for dead players
     if isDead then
         SetPedToRagdoll(myPed, Config.RagdollDuration or 60000, Config.RagdollDuration or 60000, false, false, false, false)
     end
 
-    -- Play start animation
-    playEscortStartAnimation(escorterPed, myPed, isDead, isShoulder)
-
-    -- Main escort loop with animation updates
+    -- Main escort loop
     CreateThread(function()
         while isBeingEscorted do
             Wait(0)
@@ -681,13 +691,20 @@ RegisterNetEvent('escort:beingEscorted', function(escorterId)
                     AttachEntityToEntity(me, escorterPed, 11816, 0.54, 0.54, 0.0, 0.0, 0.0, 0.0, false, false, false, false, 2, true)
                 end
             end
-
-            -- Update walking animation if escorter is moving
-            if animationActive then
-                playEscortWalkAnimation(me, isDead, isShoulder)
-            end
         end
     end)
+end)
+
+RegisterNetEvent('escort:vehicleAnimation', function(action)
+    local myPed = PlayerPedId()
+    if not DoesEntityExist(myPed) then
+        return
+    end
+
+    local dict = 'random@arrests'
+    local anim = action == 'putin' and 'generic_radio_enter' or 'generic_radio_chatter'
+
+    playAnimation(myPed, dict, anim, 49, 0.2, 0.2, 1200)
 end)
 
 -- Event: Vehicle actions
@@ -750,12 +767,9 @@ RegisterNetEvent('escort:stop', function()
     -- Handle escorter side
     if isEscorting and escortedPlayer then
         local targetPed = GetPlayerPed(escortedPlayer)
+        playEscortStopAnimation(myPed, targetIsDead, Config.CarryOnShoulder)
+
         if DoesEntityExist(targetPed) then
-            -- Play stop animation on target before detaching
-            playEscortStopAnimation(targetPed, targetIsDead, Config.CarryOnShoulder)
-            
-            Wait(500) -- Wait for stop animation to start
-            
             DetachEntity(targetPed, true, false)
             if targetIsDead then
                 StopPedRagdoll(targetPed)
@@ -767,11 +781,6 @@ RegisterNetEvent('escort:stop', function()
     -- Handle target (being escorted) side
     if isBeingEscorted then
         if DoesEntityExist(myPed) then
-            -- Play stop animation on self
-            playEscortStopAnimation(myPed, IsPedDeadOrDying(myPed, true) or IsEntityDead(myPed), Config.CarryOnShoulder)
-            
-            Wait(500) -- Wait for stop animation to start
-            
             DetachEntity(myPed, true, false)
             StopPedRagdoll(myPed)
             ClearPedTasksImmediately(myPed)
