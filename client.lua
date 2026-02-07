@@ -15,13 +15,14 @@ local lastActionTime = 0
 local stopRequestPending = false
 local animationActive = false
 local animationDictionary = nil
+local escortedAnimationDictionary = nil
 
 -- Animation Dictionaries for Different States
 local ANIM_DICTS = {
     -- Escort animations (alive players)
-    escort_start = "anim@heists@box_carry@",
-    escort_walk = "anim@heists@box_carry@",
-    escort_stop = "anim@heists@box_carry@",
+    escort_start = "anim@gangops@hostage@",
+    escort_walk = "anim@gangops@hostage@",
+    escort_stop = "anim@gangops@hostage@",
     
     -- Carry animations (dead players - shoulder)
     carry_start = "missfinale_c2mcs_1",
@@ -36,9 +37,9 @@ local ANIM_DICTS = {
 
 -- Animation Clips for Different Actions
 local ANIM_CLIPS = {
-    escort_start = "idle",
-    escort_walk = "walk",
-    escort_stop = "idle",
+    escort_start = "perp_idle",
+    escort_walk = "perp_walk",
+    escort_stop = "perp_idle",
     
     carry_start = "fin_c2_mcs_1_camman",
     carry_walk = "fin_c2_mcs_1_camman",
@@ -155,6 +156,16 @@ local function stopAnimation(ped)
     animationDictionary = nil
 end
 
+local function stopEscortedAnimation(ped)
+    if not escortedAnimationDictionary then
+        return
+    end
+
+    clearAnimation(ped)
+    RemoveAnimDict(escortedAnimationDictionary)
+    escortedAnimationDictionary = nil
+end
+
 -- =============================================================================
 -- ESCORT ANIMATION HANDLERS
 -- =============================================================================
@@ -203,6 +214,20 @@ local function playEscortStartAnimation(actorPed, isDead, isShoulder)
     end
     
     return false
+end
+
+local function playEscortedAliveAnimation(ped)
+    if not DoesEntityExist(ped) then
+        return
+    end
+
+    local dict = ANIM_DICTS.escort_walk
+    local anim = ANIM_CLIPS.drag_walk
+
+    if loadAnimationDictionary(dict) then
+        escortedAnimationDictionary = dict
+        TaskPlayAnim(ped, dict, anim, 8.0, -8.0, -1, 33, 0, false, false, false)
+    end
 end
 
 -- Play walking animation while escorting is active
@@ -689,6 +714,7 @@ RegisterNetEvent('escort:beingEscorted', function(escorterId)
                     end
                 else
                     AttachEntityToEntity(me, escorterPed, 11816, 0.54, 0.54, 0.0, 0.0, 0.0, 0.0, false, false, false, false, 2, true)
+                    playEscortedAliveAnimation(me)
                 end
             end
         end
@@ -783,6 +809,7 @@ RegisterNetEvent('escort:stop', function()
         if DoesEntityExist(myPed) then
             DetachEntity(myPed, true, false)
             StopPedRagdoll(myPed)
+            stopEscortedAnimation(myPed)
             ClearPedTasksImmediately(myPed)
         end
     end
@@ -797,6 +824,7 @@ RegisterNetEvent('escort:stop', function()
     -- Reset animation state
     animationActive = false
     animationDictionary = nil
+    escortedAnimationDictionary = nil
     
     Framework.Debug('Escort/carry stopped')
 end)
@@ -849,6 +877,7 @@ AddEventHandler('onResourceStop', function(resourceName)
         if DoesEntityExist(myPed) then
             DetachEntity(myPed, true, false)
             StopPedRagdoll(myPed)
+            stopEscortedAnimation(myPed)
             ClearPedTasksImmediately(myPed)
             
             -- Stop any active animations
