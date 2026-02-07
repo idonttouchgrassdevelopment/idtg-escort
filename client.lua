@@ -101,18 +101,24 @@ local function requestStart(mode)
 end
 
 local function requestStop(targetServerId)
-    if onCooldown() then
-        return
+    TriggerServerEvent('escort:stopAction', targetServerId)
+end
+
+local function getKnownStopTargetServerId()
+    if isEscorting and escortedPlayer then
+        return GetPlayerServerId(escortedPlayer)
     end
 
-    TriggerServerEvent('escort:stopAction', targetServerId)
-    stampCooldown()
+    if isBeingEscorted and escortedBy then
+        return GetPlayerServerId(escortedBy)
+    end
+
+    return nil
 end
 
 local function toggleMode(mode)
     if isEscorting or isBeingEscorted then
-        local nearbyTarget = getNearestTargetServerId(true)
-        requestStop(nearbyTarget)
+        requestStop(getKnownStopTargetServerId())
     else
         requestStart(mode)
     end
@@ -144,8 +150,8 @@ RegisterCommand('carry', function()
 end, false)
 
 RegisterCommand('unescort', function()
-    local nearbyTarget = getNearestTargetServerId(true)
-    requestStop(nearbyTarget)
+    local targetServerId = getKnownStopTargetServerId() or getNearestTargetServerId(true)
+    requestStop(targetServerId)
 end, false)
 
 RegisterCommand('putinvehicle', function()
@@ -281,7 +287,6 @@ RegisterNetEvent('escort:start', function(targetId)
     targetIsDead = IsPedDeadOrDying(targetPed, true) or IsEntityDead(targetPed)
     escortedPlayer = targetPlayer
     isEscorting = true
-    notify('Escort started', 'success')
 
     CreateThread(function()
         while isEscorting do
@@ -307,7 +312,6 @@ RegisterNetEvent('escort:beingEscorted', function(escorterId)
 
     escortedBy = escorterPlayer
     isBeingEscorted = true
-    notify('You are being escorted', 'inform')
 
     local myPed = PlayerPedId()
     if IsPedDeadOrDying(myPed, true) or IsEntityDead(myPed) then
@@ -409,10 +413,6 @@ RegisterNetEvent('escort:stop', function()
             StopPedRagdoll(myPed)
             ClearPedTasksImmediately(myPed)
         end
-    end
-
-    if isEscorting or isBeingEscorted then
-        notify('Escort stopped', 'inform')
     end
 
     isEscorting = false
