@@ -1,10 +1,13 @@
 Config = {}
 
-Config.DefaultKey = 'H' -- Default keybind (can be changed by player in settings)
+Config.DefaultEscortKey = 'H' -- Default escort keybind (can be changed by player in settings)
+Config.DefaultCarryKey = 'G' -- Default carry keybind (can be changed by player in settings)
+Config.DefaultKey = Config.DefaultEscortKey -- Backwards compatibility for older configs
 Config.MaxEscortDistance = 2.5 -- Maximum distance to start escort
 Config.UseTarget = true -- Set to true if you want to use ox_target
 Config.Debug = true -- Set to false to disable debug prints
-Config.EscortCooldown = 5000 -- Cooldown between escort actions in milliseconds (5000 = 5 seconds)
+Config.ActionCooldown = 5000 -- Cooldown between escort/carry actions in milliseconds
+Config.EscortCooldown = Config.ActionCooldown -- Backwards compatibility for older configs
 
 -- Carry and Escort Options
 Config.AllowCarryDead = true -- Allow carrying dead players

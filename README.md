@@ -7,8 +7,8 @@ A multi-framework escort script for FiveM that allows players to escort other pl
 - ✅ Auto Framework Detection
 - ✅ **Dead and Alive Player Support**
 - ✅ **Intelligent Carry/Escort Mechanics** (ragdoll for dead, attachment for alive)
-- ✅ Customizable keybind through FiveM settings
-- ✅ `/escort` command support
+- ✅ Customizable escort/carry keybinds through FiveM settings
+- ✅ `/escort` and `/carry` command support
 - ✅ Optional ox_target integration
 - ✅ Distance checking
 - ✅ Bridge system for easy framework handling
@@ -46,10 +46,12 @@ escort-script/
 Open `config.lua` to customize:
 
 ```lua
-Config.DefaultKey = 'H' -- Default keybind
+Config.DefaultEscortKey = 'H' -- Default escort keybind
+Config.DefaultCarryKey = 'G' -- Default carry keybind
 Config.MaxEscortDistance = 2.5 -- Maximum distance to escort
 Config.UseTarget = false -- Enable ox_target integration
 Config.Debug = true -- Enable debug prints
+Config.ActionCooldown = 5000 -- Cooldown for escort/carry start/stop in milliseconds
 Config.Framework = 'auto' -- Auto-detect or specify: 'qbox', 'qbcore', 'esx', 'standalone'
 
 -- Carry and Escort Options
@@ -85,7 +87,8 @@ The script automatically detects whether a player is dead or alive and adjusts b
 
 **Using Keybind:**
 1. Stand near another player (within 2.5 units by default)
-2. Press the keybind (default: H) to start/stop escorting
+2. Press your escort keybind (default: H) to start/stop escorting alive players
+3. Press your carry keybind (default: G) to start/stop carrying dead players
 
 **Changing Keybind:**
 1. Press ESC
@@ -94,7 +97,8 @@ The script automatically detects whether a player is dead or alive and adjusts b
 4. Click and press your desired key
 
 **Using Command:**
-- Type `/escort` in chat or F8 console
+- Type `/escort` for alive escort
+- Type `/carry` for dead carry
 
 **Using Target System (if enabled):**
 - Look at a player and select "Escort/Release" from the target menu
