@@ -4,6 +4,7 @@ local isBeingEscorted = false
 local escortedBy = nil
 local targetIsDead = false
 local lastActionTime = 0
+local stopRequestPending = false
 
 local function getCooldownMs()
     return Config.ActionCooldown or Config.EscortCooldown or 5000
@@ -101,16 +102,31 @@ local function requestStart(mode)
 end
 
 local function requestStop(targetServerId)
+    if stopRequestPending then
+        return
+    end
+
+    stopRequestPending = true
     TriggerServerEvent('escort:stopAction', targetServerId)
 end
 
 local function getKnownStopTargetServerId()
     if isEscorting and escortedPlayer then
-        return GetPlayerServerId(escortedPlayer)
+        local targetServerId = GetPlayerServerId(escortedPlayer)
+        if targetServerId and targetServerId > 0 then
+            return targetServerId
+        end
+
+        return nil
     end
 
     if isBeingEscorted and escortedBy then
-        return GetPlayerServerId(escortedBy)
+        local targetServerId = GetPlayerServerId(escortedBy)
+        if targetServerId and targetServerId > 0 then
+            return targetServerId
+        end
+
+        return nil
     end
 
     return nil
@@ -395,6 +411,8 @@ RegisterNetEvent('escort:vehicle', function(action)
 end)
 
 RegisterNetEvent('escort:stop', function()
+    stopRequestPending = false
+
     if isEscorting and escortedPlayer then
         local targetPed = GetPlayerPed(escortedPlayer)
         if DoesEntityExist(targetPed) then
