@@ -372,16 +372,12 @@ local function getEscortTarget()
     return closestPlayer
 end
 
-local function isPedEnteringOrInVehicle(ped)
+local function isPedInVehicle(ped)
     if not ped or ped == 0 or not DoesEntityExist(ped) then
         return false
     end
 
-    if IsPedInAnyVehicle(ped, false) then
-        return true
-    end
-
-    return GetVehiclePedIsTryingToEnter(ped) ~= 0
+    return IsPedInAnyVehicle(ped, false)
 end
 
 local function getNearestTargetServerId(requireEscortedState)
@@ -412,8 +408,8 @@ local function requestStart()
         return
     end
 
-    if isPedEnteringOrInVehicle(PlayerPedId()) then
-        notify('You cannot escort while entering a vehicle', 'error')
+    if isPedInVehicle(PlayerPedId()) then
+        notify('You cannot escort while inside a vehicle', 'error')
         return
     end
 
@@ -423,8 +419,8 @@ local function requestStart()
     end
 
     local targetPed = GetPlayerPed(targetPlayer)
-    if isPedEnteringOrInVehicle(targetPed) then
-        notify('Target cannot be escorted while entering a vehicle', 'error')
+    if isPedInVehicle(targetPed) then
+        notify('Target cannot be escorted while inside a vehicle', 'error')
         return
     end
 
@@ -562,8 +558,8 @@ if Config.UseTarget then
                             return
                         end
 
-                        if isPedEnteringOrInVehicle(PlayerPedId()) then
-                            notify('You cannot escort while entering a vehicle', 'error')
+                        if isPedInVehicle(PlayerPedId()) then
+                            notify('You cannot escort while inside a vehicle', 'error')
                             return
                         end
 
@@ -573,8 +569,8 @@ if Config.UseTarget then
                             return
                         end
 
-                        if isPedEnteringOrInVehicle(data.entity) then
-                            notify('Target cannot be escorted while entering a vehicle', 'error')
+                        if isPedInVehicle(data.entity) then
+                            notify('Target cannot be escorted while inside a vehicle', 'error')
                             return
                         end
 
