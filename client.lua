@@ -487,6 +487,11 @@ local function toggleEscort()
 end
 
 local function requestVehicleAction(action, targetServerId, vehicleNetId)
+    if not Config.AllowVehicleEscort then
+        notify('Vehicle escort actions are disabled', 'error')
+        return
+    end
+
     if onCooldown() then
         return
     end
@@ -600,7 +605,7 @@ if Config.UseTarget then
                         requestVehicleAction('putin', GetPlayerServerId(targetId))
                     end,
                     canInteract = function()
-                        return true
+                        return Config.AllowVehicleEscort
                     end
                 },
                 {
@@ -617,7 +622,7 @@ if Config.UseTarget then
                         requestVehicleAction('takeout', GetPlayerServerId(targetId))
                     end,
                     canInteract = function()
-                        return true
+                        return Config.AllowVehicleEscort
                     end
                 }
             })
@@ -649,7 +654,7 @@ if Config.UseTarget then
                         requestVehicleAction('putin', targetServerId, VehToNet(vehicle))
                     end,
                     canInteract = function(entity)
-                        return isEscorting and escortedPlayer ~= nil and entity and entity ~= 0 and DoesEntityExist(entity)
+                        return Config.AllowVehicleEscort and isEscorting and escortedPlayer ~= nil and entity and entity ~= 0 and DoesEntityExist(entity)
                     end
                 }
             })
