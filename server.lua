@@ -162,6 +162,11 @@ local function handleSystemStop(src)
 end
 
 local function handleVehicleAction(src, targetId, action, vehicleNetId)
+    if not Config.AllowVehicleEscort then
+        notifyPlayer(src, 'Vehicle escort actions are disabled', 'error')
+        return
+    end
+
     action = action == 'takeout' and 'takeout' or 'putin'
 
     if not targetId or targetId == src then

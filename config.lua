@@ -14,6 +14,7 @@ Config.NotifyDuration = 5000 -- Notification duration in ms
 
 -- Escort Options
 Config.AllowEscortAlive = true -- Allow escorting alive players
+Config.AllowVehicleEscort = false -- Disable putting escorted players into/out of vehicles
 
 -- Framework Options: 'qbox', 'qbcore', 'esx', 'standalone'
 Config.Framework = 'auto' -- 'auto' will detect automatically
