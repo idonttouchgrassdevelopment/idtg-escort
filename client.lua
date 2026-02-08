@@ -519,7 +519,11 @@ RegisterCommand('takeoutvehicle', function()
     requestVehicleAction('takeout')
 end, false)
 
-RegisterKeyMapping('escort', 'Toggle Escort Player (alive target)', 'keyboard', Config.DefaultEscortKey or Config.DefaultKey or 'H')
+RegisterCommand('escort:keybindToggle', function()
+    toggleEscort()
+end, false)
+
+RegisterKeyMapping('escort:keybindToggle', 'Toggle Escort Player (alive target)', 'keyboard', Config.DefaultEscortKey or Config.DefaultKey or 'H')
 RegisterKeyMapping('putinvehicle', 'Put nearby escorted player in nearest vehicle', 'keyboard', Config.DefaultPutInVehicleKey or 'J')
 RegisterKeyMapping('takeoutvehicle', 'Take escorted player out of vehicle', 'keyboard', Config.DefaultTakeOutVehicleKey or 'K')
 
@@ -650,6 +654,42 @@ if Config.UseTarget then
                     end,
                     canInteract = function(entity)
                         return isEscorting and escortedPlayer ~= nil and entity and entity ~= 0 and DoesEntityExist(entity)
+                    end
+                },
+                {
+                    name = 'escort_takeout_vehicle_selected',
+                    icon = 'fa-solid fa-door-open',
+                    label = 'Take Escorted Out Of This Vehicle',
+                    distance = 3.0,
+                    onSelect = function(data)
+                        if not isEscorting or not escortedPlayer then
+                            notify('You must escort someone first', 'error')
+                            return
+                        end
+
+                        local targetServerId = GetPlayerServerId(escortedPlayer)
+                        if not targetServerId or targetServerId <= 0 then
+                            notify('Escorted player is not available', 'error')
+                            return
+                        end
+
+                        requestVehicleAction('takeout', targetServerId)
+                    end,
+                    canInteract = function(entity)
+                        if not isEscorting or not escortedPlayer then
+                            return false
+                        end
+
+                        if not entity or entity == 0 or not DoesEntityExist(entity) then
+                            return false
+                        end
+
+                        local escortedPed = GetPlayerPed(escortedPlayer)
+                        if not DoesEntityExist(escortedPed) then
+                            return false
+                        end
+
+                        return GetVehiclePedIsIn(escortedPed, false) == entity
                     end
                 }
             })
@@ -798,7 +838,6 @@ RegisterNetEvent('escort:vehicle', function(action, vehicleNetId)
         end
 
         notify('Placed in vehicle', 'success')
-        TriggerServerEvent('escort:systemStop')
         return
     end
 
