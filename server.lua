@@ -41,16 +41,12 @@ local function areNearby(src, targetId)
 end
 
 
-local function isPedEnteringOrInVehicle(ped)
+local function isPedInVehicle(ped)
     if not ped or ped == 0 then
         return false
     end
 
-    if IsPedInAnyVehicle(ped, false) then
-        return true
-    end
-
-    return GetVehiclePedIsTryingToEnter(ped) ~= 0
+    return IsPedInAnyVehicle(ped, false)
 end
 
 local function notifyPlayer(playerId, message, messageType)
@@ -97,8 +93,8 @@ local function handleRequest(src, targetId)
 
     local srcPed = GetPlayerPed(src)
     local targetPed = GetPlayerPed(targetId)
-    if isPedEnteringOrInVehicle(srcPed) or isPedEnteringOrInVehicle(targetPed) then
-        notifyPlayer(src, 'You cannot escort while either player is entering a vehicle', 'error')
+    if isPedInVehicle(srcPed) or isPedInVehicle(targetPed) then
+        notifyPlayer(src, 'You cannot escort while either player is inside a vehicle', 'error')
         return
     end
 
