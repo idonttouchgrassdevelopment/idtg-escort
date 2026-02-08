@@ -1,12 +1,13 @@
 # IDTG Escort
 
-A multi-framework FiveM escort script with force unescort and vehicle placement actions.
+A multi-framework FiveM escort script with escort and vehicle placement actions.
 
 ## Features
 - Multi-framework support (QBox, QBCore, ESX, Standalone)
 - Auto framework detection
 - Escort system focused on living players only (carry removed)
-- Unified stop flow (`/unescort`) for escorter or escorted target
+- Escorter-controlled stop flow via `/escort` toggle
+- Escorts are blocked while either player is entering or inside a vehicle
 - Put escorted target in nearest vehicle and take them out
 - Configurable escort + vehicle in/out animations with action delays
 - `ox_target` vehicle third-eye option to put an escorted target into a selected car
@@ -15,14 +16,12 @@ A multi-framework FiveM escort script with force unescort and vehicle placement 
 
 ## Commands
 - `/escort` - Start/stop escort for alive targets
-- `/unescort` - Force stop escort (escorter or target can use)
 - `/putinvehicle` - Put escorted target in nearest vehicle
 - `/takeoutvehicle` - Remove escorted target from vehicle
 - `/escortdebug` - Print local debug state
 
 ## Default Keybinds
 - Escort: `H`
-- Unescort: `U`
 - Put in vehicle: `J`
 - Take out vehicle: `K`
 
@@ -38,5 +37,5 @@ A multi-framework FiveM escort script with force unescort and vehicle placement 
 ## Notes
 - Vehicle actions require the two players to be in an active escort pair.
 - Notifications use framework-native APIs when available and fallback to chat messages.
-- If `ox_target` is enabled, player target options include escort, unescort, put in vehicle, and take out vehicle.
+- If `ox_target` is enabled, player target options include escort, put in vehicle, and take out vehicle.
 - If `ox_target` is enabled, vehicle target options include putting your currently escorted target into the specific vehicle you third-eye.

@@ -1,7 +1,6 @@
 Config = {}
 
 Config.DefaultEscortKey = 'H' -- Default escort keybind (can be changed by player in settings)
-Config.DefaultUnescortKey = 'U' -- Stop escort even if started by command/keybind/target
 Config.DefaultPutInVehicleKey = 'J' -- Put escorted target in vehicle
 Config.DefaultTakeOutVehicleKey = 'K' -- Take escorted target out of vehicle
 Config.DefaultKey = Config.DefaultEscortKey -- Backwards compatibility for older configs
