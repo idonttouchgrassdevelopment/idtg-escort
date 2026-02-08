@@ -41,6 +41,23 @@ local function areNearby(src, targetId)
 end
 
 
+
+local function isNearVehicle(src, vehicleNetId)
+    if not vehicleNetId then
+        return false
+    end
+
+    local srcPed = GetPlayerPed(src)
+    local vehicle = NetToVeh(vehicleNetId)
+    if srcPed == 0 or vehicle == 0 then
+        return false
+    end
+
+    local srcCoords = GetEntityCoords(srcPed)
+    local vehicleCoords = GetEntityCoords(vehicle)
+    return #(srcCoords - vehicleCoords) <= ((Config.VehicleSearchRadius or 5.0) + 1.0)
+end
+
 local function isPedInVehicle(ped)
     if not ped or ped == 0 then
         return false
@@ -191,7 +208,9 @@ local function handleVehicleAction(src, targetId, action, vehicleNetId)
         return
     end
 
-    if not areNearby(src, targetId) then
+    local targetNearby = areNearby(src, targetId)
+    local vehicleNearby = isNearVehicle(src, vehicleNetId)
+    if not targetNearby and not vehicleNearby then
         notifyPlayer(src, 'Target is too far away', 'error')
         return
     end
