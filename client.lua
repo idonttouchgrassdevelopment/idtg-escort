@@ -752,6 +752,10 @@ RegisterNetEvent('escort:vehicle', function(action, vehicleNetId)
     Wait(getVehicleActionDelay(action))
 
     if action == 'putin' then
+        -- Stop the local attach loop immediately so we do not reattach while entering a vehicle
+        isBeingEscorted = false
+        escortedBy = nil
+
         local vehicle = 0
         if vehicleNetId then
             vehicle = NetToVeh(vehicleNetId)
@@ -790,6 +794,10 @@ RegisterNetEvent('escort:vehicle', function(action, vehicleNetId)
     end
 
     if action == 'takeout' then
+        -- Ensure attach loop is disabled while being removed from vehicle.
+        isBeingEscorted = false
+        escortedBy = nil
+
         local vehicle = GetVehiclePedIsIn(myPed, false)
         if vehicle == 0 then
             notify('Target is not in a vehicle', 'error')
@@ -816,7 +824,9 @@ RegisterNetEvent('escort:stop', function()
 
         if DoesEntityExist(targetPed) then
             DetachEntity(targetPed, true, false)
-            ClearPedTasksImmediately(targetPed)
+            if not IsPedInAnyVehicle(targetPed, false) then
+                ClearPedTasksImmediately(targetPed)
+            end
         end
     end
 
@@ -825,7 +835,9 @@ RegisterNetEvent('escort:stop', function()
         if DoesEntityExist(myPed) then
             DetachEntity(myPed, true, false)
             stopEscortedAnimation(myPed)
-            ClearPedTasksImmediately(myPed)
+            if not IsPedInAnyVehicle(myPed, false) then
+                ClearPedTasksImmediately(myPed)
+            end
         end
     end
 
