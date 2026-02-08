@@ -380,6 +380,20 @@ local function isPedInVehicle(ped)
     return IsPedInAnyVehicle(ped, false)
 end
 
+
+local function blockVehicleEntryWhileEscorting()
+    if not isEscorting then
+        return
+    end
+
+    DisableControlAction(0, 23, true) -- INPUT_ENTER
+    DisableControlAction(0, 75, true) -- INPUT_VEH_EXIT (prevents shuffle/enter edge cases)
+
+    if IsDisabledControlJustPressed(0, 23) then
+        notify('You cannot enter a vehicle while escorting someone', 'error')
+    end
+end
+
 local function getNearestTargetServerId(requireEscortedState)
     local closestPlayer, distance = Framework.Client.GetClosestPlayer(Config.MaxEscortDistance)
     if closestPlayer == -1 or distance > Config.MaxEscortDistance then
@@ -728,21 +742,34 @@ RegisterNetEvent('escort:start', function(targetId)
 
     CreateThread(function()
         while isEscorting do
-            Wait(500)
+            Wait(250)
 
             local myPed = PlayerPedId()
-            local ped = GetPlayerPed(escortedPlayer)
-            
-            if not DoesEntityExist(myPed) or not DoesEntityExist(ped) then
+            local ped = escortedPlayer and GetPlayerPed(escortedPlayer) or 0
+
+            if not DoesEntityExist(myPed) or ped == 0 or not DoesEntityExist(ped) then
                 if escortedPlayer then
                     TriggerServerEvent('escort:stopAction')
                 end
                 break
             end
 
+            if IsPedInAnyVehicle(myPed, false) then
+                notify('Escort stopped because you entered a vehicle', 'error')
+                TriggerServerEvent('escort:stopAction')
+                break
+            end
+
             if animationActive then
                 playEscortWalkAnimation(myPed)
             end
+        end
+    end)
+
+    CreateThread(function()
+        while isEscorting do
+            Wait(0)
+            blockVehicleEntryWhileEscorting()
         end
     end)
 end)
@@ -761,23 +788,27 @@ RegisterNetEvent('escort:beingEscorted', function(escorterId)
     local myPed = PlayerPedId()
     -- Main escort loop
     CreateThread(function()
-        while isBeingEscorted do
-            Wait(0)
+        local nextAnimRefresh = 0
 
-            local escorterPed = GetPlayerPed(escortedBy)
+        while isBeingEscorted do
+            Wait(100)
+
+            local escorterPed = escortedBy and GetPlayerPed(escortedBy) or 0
             local me = PlayerPedId()
 
-            if not DoesEntityExist(escorterPed) or not DoesEntityExist(me) then
+            if escorterPed == 0 or not DoesEntityExist(escorterPed) or not DoesEntityExist(me) then
                 TriggerServerEvent('escort:stopAction')
                 break
             end
 
             local escortedCfg = getEscortAnimConfig('escorted_loop')
             if not IsEntityAttachedToEntity(me, escorterPed) then
-                AttachEntityToEntity(me, escorterPed, 11816, 0.35, 0.45, 0.0, 0.0, 0.0, 15.0, false, false, false, false, 2, true)
+                AttachEntityToEntity(me, escorterPed, 11816, 0.35, 0.45, 0.0, 0.0, 0.0, 15.0, false, true, false, true, 2, true)
                 playEscortedAliveAnimation(me)
-            elseif not IsEntityPlayingAnim(me, escortedCfg.dict, escortedCfg.clip, 3) then
+                nextAnimRefresh = GetGameTimer() + 800
+            elseif GetGameTimer() >= nextAnimRefresh and not IsEntityPlayingAnim(me, escortedCfg.dict, escortedCfg.clip, 3) then
                 playEscortedAliveAnimation(me)
+                nextAnimRefresh = GetGameTimer() + 800
             end
         end
     end)
