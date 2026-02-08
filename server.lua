@@ -40,8 +40,43 @@ local function areNearby(src, targetId)
     return #(srcCoords - targetCoords) <= (Config.MaxEscortDistance + 1.0)
 end
 
+
+local function isPedEnteringOrInVehicle(ped)
+    if not ped or ped == 0 then
+        return false
+    end
+
+    if IsPedInAnyVehicle(ped, false) then
+        return true
+    end
+
+    return GetVehiclePedIsTryingToEnter(ped) ~= 0
+end
+
 local function notifyPlayer(playerId, message, messageType)
     TriggerClientEvent('escort:notify', playerId, message, messageType or 'inform', Config.NotifyDuration or 5000)
+end
+
+
+local function stopEscortPair(escorter, target)
+    if not escorter or not target then
+        return false
+    end
+
+    escortStates[escorter] = nil
+    stampCooldown(escorter)
+    stampCooldown(target)
+
+    if Framework.Server.PlayerExists(escorter) then
+        TriggerClientEvent('escort:stop', escorter)
+    end
+    if Framework.Server.PlayerExists(target) then
+        TriggerClientEvent('escort:stop', target)
+    end
+
+    local srcName = Framework.Server.GetPlayerName(escorter)
+    Framework.Server.Log(('%s (ID: %s) stopped escort'):format(srcName, escorter), 'info')
+    return true
 end
 
 local function handleRequest(src, targetId)
@@ -57,6 +92,13 @@ local function handleRequest(src, targetId)
 
     if not areNearby(src, targetId) then
         notifyPlayer(src, 'Target is too far away', 'error')
+        return
+    end
+
+    local srcPed = GetPlayerPed(src)
+    local targetPed = GetPlayerPed(targetId)
+    if isPedEnteringOrInVehicle(srcPed) or isPedEnteringOrInVehicle(targetPed) then
+        notifyPlayer(src, 'You cannot escort while either player is entering a vehicle', 'error')
         return
     end
 
@@ -91,7 +133,23 @@ local function handleRequest(src, targetId)
     Framework.Server.Log(('%s (ID: %s) started %s on %s (ID: %s)'):format(srcName, src, mode, targetName, targetId), 'info')
 end
 
-local function handleStop(src, targetId)
+local function handleStop(src)
+    local escorter = src
+    local target = escortStates[escorter]
+
+    if not escorter or not target then
+        notifyPlayer(src, 'Only the escorter can stop escorting', 'error')
+        return
+    end
+
+    if stopEscortPair(escorter, target) then
+        if Framework.Server.PlayerExists(src) then
+            notifyPlayer(src, 'Escort stopped', 'success')
+        end
+    end
+end
+
+local function handleSystemStop(src)
     local escorter = src
     local target = escortStates[escorter]
 
@@ -101,39 +159,10 @@ local function handleStop(src, targetId)
     end
 
     if not escorter or not target then
-        if targetId and escortStates[targetId] == src then
-            escorter = targetId
-            target = src
-        elseif targetId then
-            local targetEscorter = getEscorterForTarget(targetId)
-            if targetEscorter and (src == targetId or src == targetEscorter) then
-                escorter = targetEscorter
-                target = escortStates[targetEscorter]
-            end
-        end
-    end
-
-    if not escorter or not target then
         return
     end
 
-    escortStates[escorter] = nil
-    stampCooldown(escorter)
-    stampCooldown(target)
-
-    if Framework.Server.PlayerExists(escorter) then
-        TriggerClientEvent('escort:stop', escorter)
-    end
-    if Framework.Server.PlayerExists(target) then
-        TriggerClientEvent('escort:stop', target)
-    end
-
-    if Framework.Server.PlayerExists(src) then
-        notifyPlayer(src, 'Escort stopped', 'success')
-    end
-
-    local srcName = Framework.Server.GetPlayerName(escorter)
-    Framework.Server.Log(('%s (ID: %s) stopped escort'):format(srcName, escorter), 'info')
+    stopEscortPair(escorter, target)
 end
 
 local function handleVehicleAction(src, targetId, action, vehicleNetId)
@@ -183,8 +212,12 @@ RegisterNetEvent('escort:requestAction', function(targetId, mode)
     handleRequest(source, targetId)
 end)
 
-RegisterNetEvent('escort:stopAction', function(targetId)
-    handleStop(source, targetId)
+RegisterNetEvent('escort:stopAction', function()
+    handleStop(source)
+end)
+
+RegisterNetEvent('escort:systemStop', function()
+    handleSystemStop(source)
 end)
 
 RegisterNetEvent('escort:vehicleAction', function(targetId, action, vehicleNetId)
@@ -196,8 +229,8 @@ RegisterNetEvent('escort:requestEscort', function(targetId)
     handleRequest(source, targetId)
 end)
 
-RegisterNetEvent('escort:stopEscort', function(targetId)
-    handleStop(source, targetId)
+RegisterNetEvent('escort:stopEscort', function()
+    handleSystemStop(source)
 end)
 
 AddEventHandler('playerDropped', function()

@@ -372,6 +372,18 @@ local function getEscortTarget()
     return closestPlayer
 end
 
+local function isPedEnteringOrInVehicle(ped)
+    if not ped or ped == 0 or not DoesEntityExist(ped) then
+        return false
+    end
+
+    if IsPedInAnyVehicle(ped, false) then
+        return true
+    end
+
+    return GetVehiclePedIsTryingToEnter(ped) ~= 0
+end
+
 local function getNearestTargetServerId(requireEscortedState)
     local closestPlayer, distance = Framework.Client.GetClosestPlayer(Config.MaxEscortDistance)
     if closestPlayer == -1 or distance > Config.MaxEscortDistance then
@@ -400,8 +412,19 @@ local function requestStart()
         return
     end
 
+    if isPedEnteringOrInVehicle(PlayerPedId()) then
+        notify('You cannot escort while entering a vehicle', 'error')
+        return
+    end
+
     local targetPlayer = getEscortTarget()
     if not targetPlayer then
+        return
+    end
+
+    local targetPed = GetPlayerPed(targetPlayer)
+    if isPedEnteringOrInVehicle(targetPed) then
+        notify('Target cannot be escorted while entering a vehicle', 'error')
         return
     end
 
@@ -421,13 +444,13 @@ local function requestStop(targetServerId)
         return
     end
 
-    if not isEscorting and not isBeingEscorted then
+    if not isEscorting then
         notify('You are not escorting anyone', 'error')
         return
     end
 
     stopRequestPending = true
-    TriggerServerEvent('escort:stopAction', targetServerId)
+    TriggerServerEvent('escort:stopAction')
 
     CreateThread(function()
         Wait(2000)
@@ -458,8 +481,10 @@ local function getKnownStopTargetServerId()
 end
 
 local function toggleEscort()
-    if isEscorting or isBeingEscorted then
+    if isEscorting then
         requestStop(getKnownStopTargetServerId())
+    elseif isBeingEscorted then
+        notify('Only the escorter can stop escorting', 'error')
     else
         requestStart()
     end
@@ -490,11 +515,6 @@ RegisterCommand('escort', function()
     toggleEscort()
 end, false)
 
-RegisterCommand('unescort', function()
-    local targetServerId = getKnownStopTargetServerId() or getNearestTargetServerId(true)
-    requestStop(targetServerId)
-end, false)
-
 RegisterCommand('putinvehicle', function()
     requestVehicleAction('putin')
 end, false)
@@ -504,7 +524,6 @@ RegisterCommand('takeoutvehicle', function()
 end, false)
 
 RegisterKeyMapping('escort', 'Toggle Escort Player (alive target)', 'keyboard', Config.DefaultEscortKey or Config.DefaultKey or 'H')
-RegisterKeyMapping('unescort', 'Stop escort (self, target, or escorter)', 'keyboard', Config.DefaultUnescortKey or 'U')
 RegisterKeyMapping('putinvehicle', 'Put nearby escorted player in nearest vehicle', 'keyboard', Config.DefaultPutInVehicleKey or 'J')
 RegisterKeyMapping('takeoutvehicle', 'Take escorted player out of vehicle', 'keyboard', Config.DefaultTakeOutVehicleKey or 'K')
 
@@ -531,8 +550,11 @@ if Config.UseTarget then
 
                         local targetServerId = GetPlayerServerId(targetId)
 
-                        if isEscorting or isBeingEscorted then
+                        if isEscorting then
                             requestStop(targetServerId)
+                            return
+                        elseif isBeingEscorted then
+                            notify('Only the escorter can stop escorting', 'error')
                             return
                         end
 
@@ -540,9 +562,19 @@ if Config.UseTarget then
                             return
                         end
 
+                        if isPedEnteringOrInVehicle(PlayerPedId()) then
+                            notify('You cannot escort while entering a vehicle', 'error')
+                            return
+                        end
+
                         local targetDeadState = IsPedDeadOrDying(data.entity, true) or IsEntityDead(data.entity)
                         if targetDeadState then
                             notify('Escort requires a living player target', 'error')
+                            return
+                        end
+
+                        if isPedEnteringOrInVehicle(data.entity) then
+                            notify('Target cannot be escorted while entering a vehicle', 'error')
                             return
                         end
 
@@ -553,25 +585,6 @@ if Config.UseTarget then
 
                         TriggerServerEvent('escort:requestAction', targetServerId, 'escort')
                         stampCooldown()
-                    end,
-                    canInteract = function()
-                        return true
-                    end
-                },
-                {
-                    name = 'escort_unescort_player',
-                    icon = 'fa-solid fa-user-xmark',
-                    label = 'Unescort / Release',
-                    distance = Config.MaxEscortDistance,
-                    onSelect = function(data)
-                        local targetId = NetworkGetPlayerIndexFromPed(data.entity)
-                        local targetServerId
-
-                        if targetId ~= -1 then
-                            targetServerId = GetPlayerServerId(targetId)
-                        end
-
-                        requestStop(targetServerId)
                     end,
                     canInteract = function()
                         return true
@@ -681,7 +694,7 @@ RegisterNetEvent('escort:start', function(targetId)
             
             if not DoesEntityExist(myPed) or not DoesEntityExist(ped) then
                 if escortedPlayer then
-                    TriggerServerEvent('escort:stopAction', GetPlayerServerId(escortedPlayer))
+                    TriggerServerEvent('escort:stopAction')
                 end
                 break
             end
@@ -789,7 +802,7 @@ RegisterNetEvent('escort:vehicle', function(action, vehicleNetId)
         end
 
         notify('Placed in vehicle', 'success')
-        TriggerServerEvent('escort:stopAction')
+        TriggerServerEvent('escort:systemStop')
         return
     end
 
@@ -864,7 +877,6 @@ end)
 -- =============================================================================
 
 TriggerEvent('chat:addSuggestion', '/escort', 'Escort or release a nearby living player')
-TriggerEvent('chat:addSuggestion', '/unescort', 'Force stop escort (works for escorter or target)')
 TriggerEvent('chat:addSuggestion', '/putinvehicle', 'Put nearby escorted target into nearest vehicle')
 TriggerEvent('chat:addSuggestion', '/takeoutvehicle', 'Take nearby escorted target out of vehicle')
 
