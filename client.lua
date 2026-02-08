@@ -15,6 +15,7 @@ local stopRequestPending = false
 local animationActive = false
 local animationDictionary = nil
 local escortedAnimationDictionary = nil
+local escortWalkAnimPlaying = false
 
 -- Default animation dictionaries/clips (overridden by Config.Animations when present)
 local ANIM_DICTS = {
@@ -254,6 +255,7 @@ local function playEscortStartAnimation(actorPed)
     
     if success then
         animationActive = true
+        escortWalkAnimPlaying = false
         Framework.Debug("Started escort animation: " .. cfg.dict .. " @ " .. cfg.clip)
 
         return true
@@ -280,7 +282,13 @@ local function playEscortWalkAnimation(ped)
     if not DoesEntityExist(ped) or not animationActive then
         return
     end
+
     local cfg = getEscortAnimConfig('escort_walk')
+
+    if IsEntityPlayingAnim(ped, cfg.dict, cfg.clip, 3) then
+        escortWalkAnimPlaying = true
+        return
+    end
 
     if animationDictionary ~= cfg.dict then
         if animationDictionary and HasAnimDictLoaded(animationDictionary) then
@@ -300,6 +308,8 @@ local function playEscortWalkAnimation(ped)
         cfg.blendOut,
         cfg.duration
     )
+
+    escortWalkAnimPlaying = true
 end
 
 -- Play stop animation when escort ends
@@ -311,6 +321,7 @@ local function playEscortStopAnimation(ped)
     if not animationActive or not animationDictionary then
         -- No active animation, just clear tasks
         clearAnimation(ped)
+        escortWalkAnimPlaying = false
         return
     end
     local cfg = getEscortAnimConfig('escort_stop')
@@ -327,6 +338,7 @@ local function playEscortStopAnimation(ped)
     
     if success then
         Framework.Debug("Playing stop animation: " .. cfg.dict .. " @ " .. cfg.clip)
+        escortWalkAnimPlaying = false
         
         -- Wait for animation to complete, then clear
         CreateThread(function()
@@ -349,6 +361,7 @@ local function playEscortStopAnimation(ped)
         clearAnimation(ped)
         animationActive = false
         animationDictionary = nil
+        escortWalkAnimPlaying = false
     end
 end
 
@@ -692,7 +705,7 @@ if Config.UseTarget then
                             return
                         end
 
-                        requestVehicleAction('takeout', targetServerId)
+                        requestVehicleAction('takeout', targetServerId, VehToNet(data.entity))
                     end,
                     canInteract = function(entity)
                         if not isEscorting or not escortedPlayer then
@@ -761,7 +774,14 @@ RegisterNetEvent('escort:start', function(targetId)
             end
 
             if animationActive then
-                playEscortWalkAnimation(myPed)
+                if not escortWalkAnimPlaying then
+                    playEscortWalkAnimation(myPed)
+                else
+                    local walkCfg = getEscortAnimConfig('escort_walk')
+                    if not IsEntityPlayingAnim(myPed, walkCfg.dict, walkCfg.clip, 3) then
+                        escortWalkAnimPlaying = false
+                    end
+                end
             end
         end
     end)
@@ -882,13 +902,21 @@ RegisterNetEvent('escort:vehicle', function(action, vehicleNetId)
         isBeingEscorted = false
         escortedBy = nil
 
-        local vehicle = GetVehiclePedIsIn(myPed, false)
-        if vehicle == 0 then
+        local currentVehicle = GetVehiclePedIsIn(myPed, false)
+        if currentVehicle == 0 then
             notify('Target is not in a vehicle', 'error')
             return
         end
 
-        TaskLeaveVehicle(myPed, vehicle, 16)
+        if vehicleNetId then
+            local selectedVehicle = NetToVeh(vehicleNetId)
+            if selectedVehicle ~= 0 and DoesEntityExist(selectedVehicle) and currentVehicle ~= selectedVehicle then
+                notify('Target is not in the selected vehicle', 'error')
+                return
+            end
+        end
+
+        TaskLeaveVehicle(myPed, currentVehicle, 16)
         Wait(300)
         ClearPedTasks(myPed)
         notify('Removed from vehicle', 'success')
@@ -934,6 +962,7 @@ RegisterNetEvent('escort:stop', function()
     animationActive = false
     animationDictionary = nil
     escortedAnimationDictionary = nil
+    escortWalkAnimPlaying = false
     
     Framework.Debug('Escort stopped')
 end)
