@@ -5,7 +5,7 @@ A multi-framework FiveM escort script focused on player escorting (vehicle place
 ## Features
 - Multi-framework support (QBox, QBCore, ESX, Standalone)
 - Auto framework detection
-- Escort system focused on living players only (carry removed)
+- Escort system with living-player escort plus `/carry` support for downed/dead targets
 - Escorter-controlled stop flow via `/escort` toggle
 - Escorts are blocked while either player is entering or inside a vehicle
 - Optional escorted target vehicle in/out actions (disabled by default)
@@ -16,6 +16,7 @@ A multi-framework FiveM escort script focused on player escorting (vehicle place
 
 ## Commands
 - `/escort` - Start/stop escort for alive targets
+- `/carry` - Start/stop carry (allows downed/dead targets)
 - `/putinvehicle` - Put escorted target in nearest vehicle
 - `/takeoutvehicle` - Remove escorted target from vehicle
 - `/escortdebug` - Print local debug state

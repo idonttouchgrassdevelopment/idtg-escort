@@ -369,7 +369,7 @@ end
 -- TARGET SELECTION
 -- =============================================================================
 
-local function getEscortTarget()
+local function getEscortTarget(allowDeadTargets)
     local closestPlayer, distance = Framework.Client.GetClosestPlayer(Config.MaxEscortDistance)
     if closestPlayer == -1 or distance > Config.MaxEscortDistance then
         Framework.Debug('No nearby player in range')
@@ -377,7 +377,7 @@ local function getEscortTarget()
         return nil
     end
     local isDead = Framework.Client.IsPlayerDead(closestPlayer)
-    if isDead then
+    if isDead and not allowDeadTargets then
         notify('Escort requires a living player target', 'error')
         return nil
     end
@@ -425,7 +425,8 @@ end
 -- ESCORT REQUEST HANDLING
 -- =============================================================================
 
-local function requestStart()
+local function requestStart(commandMode)
+    local allowDeadTargets = commandMode == 'carry'
     if isEscorting or isBeingEscorted then
         notify('You are already in an escort state', 'error')
         return
@@ -440,7 +441,7 @@ local function requestStart()
         return
     end
 
-    local targetPlayer = getEscortTarget()
+    local targetPlayer = getEscortTarget(allowDeadTargets)
     if not targetPlayer then
         return
     end
@@ -451,7 +452,7 @@ local function requestStart()
         return
     end
 
-    if not Config.AllowEscortAlive then
+    if not Config.AllowEscortAlive and not allowDeadTargets then
         Framework.Debug('Escorting alive players is disabled')
         notify('Escorting alive players is disabled', 'error')
         return
@@ -503,13 +504,13 @@ local function getKnownStopTargetServerId()
     return nil
 end
 
-local function toggleEscort()
+local function toggleEscort(commandMode)
     if isEscorting then
         requestStop(getKnownStopTargetServerId())
     elseif isBeingEscorted then
         notify('Only the escorter can stop escorting', 'error')
     else
-        requestStart()
+        requestStart(commandMode)
     end
 end
 
@@ -540,11 +541,11 @@ end
 -- =============================================================================
 
 RegisterCommand('escort', function()
-    toggleEscort()
+    toggleEscort('escort')
 end, false)
 
 RegisterCommand('carry', function()
-    toggleEscort()
+    toggleEscort('carry')
 end, false)
 
 RegisterCommand('putinvehicle', function()
@@ -981,7 +982,7 @@ end)
 -- =============================================================================
 
 TriggerEvent('chat:addSuggestion', '/escort', 'Escort or release a nearby living player')
-TriggerEvent('chat:addSuggestion', '/carry', 'Carry or release a nearby living player')
+TriggerEvent('chat:addSuggestion', '/carry', 'Carry or release a nearby player (including downed/dead)')
 TriggerEvent('chat:addSuggestion', '/putinvehicle', 'Put nearby escorted target into nearest vehicle')
 TriggerEvent('chat:addSuggestion', '/takeoutvehicle', 'Take nearby escorted target out of vehicle')
 
