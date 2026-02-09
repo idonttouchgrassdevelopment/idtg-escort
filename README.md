@@ -9,7 +9,7 @@ A multi-framework FiveM escort script focused on player escorting (vehicle place
 - Escorter-controlled stop flow via `/escort` toggle
 - Escorts are blocked while either player is entering or inside a vehicle
 - Optional escorted target vehicle in/out actions (disabled by default)
-- Configurable escort + vehicle in/out animations with action delays
+- Configurable escort, carry (fireman carry-style), and vehicle in/out animations with action delays
 - `ox_target` vehicle third-eye option to put an escorted target into a selected car
 - Built-in notifications (framework-aware + chat fallback)
 - Optional `ox_target` integration (players + vehicles)
@@ -34,7 +34,7 @@ A multi-framework FiveM escort script focused on player escorting (vehicle place
 - `Config.AllowEscortAlive`
 - `Config.AllowVehicleEscort`
 - `Config.Framework` (`auto`, `qbox`, `qbcore`, `esx`, `standalone`)
-- `Config.Animations` (escort animation clips, vehicle put in/out clips, enter/exit delays)
+- `Config.Animations` (escort clips, carry clips, vehicle put in/out clips, enter/exit delays)
 
 ## Notes
 - Vehicle actions require the two players to be in an active escort pair and `Config.AllowVehicleEscort = true`.

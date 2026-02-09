@@ -16,6 +16,7 @@ local animationActive = false
 local animationDictionary = nil
 local escortedAnimationDictionary = nil
 local escortWalkAnimPlaying = false
+local currentEscortMode = 'escort'
 
 -- Default animation dictionaries/clips (overridden by Config.Animations when present)
 local ANIM_DICTS = {
@@ -112,6 +113,30 @@ local function getVehicleActionDelay(action)
     end
 
     return (cfg and cfg.EnterDelayMs) or 1200
+end
+
+local function getCarryAnimConfig(role)
+    local defaults = {
+        carrier = { dict = 'missfinale_c2mcs_1', clip = 'fin_c2_mcs_1_camman', flag = 49, duration = -1, blendIn = 0.2, blendOut = 0.2 },
+        carried = { dict = 'nm', clip = 'firemans_carry', flag = 33, duration = -1, blendIn = 0.2, blendOut = 0.2 }
+    }
+
+    local cfg = Config.Animations and Config.Animations.Carry
+    local selected = role == 'carrier' and cfg and cfg.Carrier or cfg and cfg.Carried
+    local default = defaults[role]
+
+    if type(selected) ~= 'table' then
+        return default
+    end
+
+    return {
+        dict = selected.dict or default.dict,
+        clip = selected.clip or default.clip,
+        flag = selected.flag or default.flag,
+        duration = selected.duration or default.duration,
+        blendIn = selected.blendIn or default.blendIn,
+        blendOut = selected.blendOut or default.blendOut
+    }
 end
 
 -- =============================================================================
@@ -459,7 +484,7 @@ local function requestStart(commandMode)
     end
 
     local targetServerId = GetPlayerServerId(targetPlayer)
-    TriggerServerEvent('escort:requestAction', targetServerId, 'escort')
+    TriggerServerEvent('escort:requestAction', targetServerId, allowDeadTargets and 'carry' or 'escort')
     stampCooldown()
 end
 
@@ -739,7 +764,7 @@ end
 -- =============================================================================
 
 -- Event: Start escorting (escorter side)
-RegisterNetEvent('escort:start', function(targetId)
+RegisterNetEvent('escort:start', function(targetId, mode)
     local targetPlayer = GetPlayerFromServerId(targetId)
     if targetPlayer == -1 or targetPlayer == nil then
         return
@@ -752,9 +777,17 @@ RegisterNetEvent('escort:start', function(targetId)
 
     escortedPlayer = targetPlayer
     isEscorting = true
+    currentEscortMode = mode == 'carry' and 'carry' or 'escort'
     stopRequestPending = false
 
-    playEscortStartAnimation(PlayerPedId())
+    if currentEscortMode == 'carry' then
+        local carryCfg = getCarryAnimConfig('carrier')
+        animationDictionary = carryCfg.dict
+        animationActive = playAnimation(PlayerPedId(), carryCfg.dict, carryCfg.clip, carryCfg.flag, carryCfg.blendIn, carryCfg.blendOut, carryCfg.duration)
+        escortWalkAnimPlaying = false
+    else
+        playEscortStartAnimation(PlayerPedId())
+    end
 
     Framework.Debug('Started escorting player: ' .. targetId)
 
@@ -779,7 +812,12 @@ RegisterNetEvent('escort:start', function(targetId)
             end
 
             if animationActive then
-                if not escortWalkAnimPlaying then
+                if currentEscortMode == 'carry' then
+                    local carryCfg = getCarryAnimConfig('carrier')
+                    if not IsEntityPlayingAnim(myPed, carryCfg.dict, carryCfg.clip, 3) then
+                        playAnimation(myPed, carryCfg.dict, carryCfg.clip, carryCfg.flag, carryCfg.blendIn, carryCfg.blendOut, carryCfg.duration)
+                    end
+                elseif not escortWalkAnimPlaying then
                     playEscortWalkAnimation(myPed)
                 else
                     local walkCfg = getEscortAnimConfig('escort_walk')
@@ -800,7 +838,7 @@ RegisterNetEvent('escort:start', function(targetId)
 end)
 
 -- Event: Being escorted (target side) - ENHANCED WITH ANIMATIONS
-RegisterNetEvent('escort:beingEscorted', function(escorterId)
+RegisterNetEvent('escort:beingEscorted', function(escorterId, mode)
     local escorterPlayer = GetPlayerFromServerId(escorterId)
     if escorterPlayer == -1 then
         return
@@ -808,6 +846,7 @@ RegisterNetEvent('escort:beingEscorted', function(escorterId)
 
     escortedBy = escorterPlayer
     isBeingEscorted = true
+    currentEscortMode = mode == 'carry' and 'carry' or 'escort'
     stopRequestPending = false
 
     local myPed = PlayerPedId()
@@ -826,13 +865,22 @@ RegisterNetEvent('escort:beingEscorted', function(escorterId)
                 break
             end
 
-            local escortedCfg = getEscortAnimConfig('escorted_loop')
+            local escortedCfg = currentEscortMode == 'carry' and getCarryAnimConfig('carried') or getEscortAnimConfig('escorted_loop')
             if not IsEntityAttachedToEntity(me, escorterPed) then
-                AttachEntityToEntity(me, escorterPed, 11816, 0.35, 0.45, 0.0, 0.0, 0.0, 15.0, false, true, false, true, 2, true)
-                playEscortedAliveAnimation(me)
+                if currentEscortMode == 'carry' then
+                    AttachEntityToEntity(me, escorterPed, 0, 0.27, 0.15, 0.63, 0.5, 0.5, 180.0, false, false, false, false, 2, false)
+                    playAnimation(me, escortedCfg.dict, escortedCfg.clip, escortedCfg.flag, escortedCfg.blendIn, escortedCfg.blendOut, escortedCfg.duration)
+                else
+                    AttachEntityToEntity(me, escorterPed, 11816, 0.35, 0.45, 0.0, 0.0, 0.0, 15.0, false, true, false, true, 2, true)
+                    playEscortedAliveAnimation(me)
+                end
                 nextAnimRefresh = GetGameTimer() + 800
             elseif GetGameTimer() >= nextAnimRefresh and not IsEntityPlayingAnim(me, escortedCfg.dict, escortedCfg.clip, 3) then
-                playEscortedAliveAnimation(me)
+                if currentEscortMode == 'carry' then
+                    playAnimation(me, escortedCfg.dict, escortedCfg.clip, escortedCfg.flag, escortedCfg.blendIn, escortedCfg.blendOut, escortedCfg.duration)
+                else
+                    playEscortedAliveAnimation(me)
+                end
                 nextAnimRefresh = GetGameTimer() + 800
             end
         end
@@ -865,6 +913,7 @@ RegisterNetEvent('escort:vehicle', function(action, vehicleNetId)
         -- Stop the local attach loop immediately so we do not reattach while entering a vehicle
         isBeingEscorted = false
         escortedBy = nil
+        currentEscortMode = 'escort'
 
         local vehicle = 0
         if vehicleNetId then
@@ -906,6 +955,7 @@ RegisterNetEvent('escort:vehicle', function(action, vehicleNetId)
         -- Ensure attach loop is disabled while being removed from vehicle.
         isBeingEscorted = false
         escortedBy = nil
+        currentEscortMode = 'escort'
 
         local currentVehicle = GetVehiclePedIsIn(myPed, false)
         if currentVehicle == 0 then
@@ -963,6 +1013,7 @@ RegisterNetEvent('escort:stop', function()
     escortedPlayer = nil
     isBeingEscorted = false
     escortedBy = nil
+    currentEscortMode = 'escort'
     -- Reset animation state
     animationActive = false
     animationDictionary = nil

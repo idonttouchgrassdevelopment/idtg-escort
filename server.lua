@@ -113,8 +113,8 @@ local function stopEscortPair(escorter, target)
     return true
 end
 
-local function handleRequest(src, targetId)
-    local mode = 'escort'
+local function handleRequest(src, targetId, mode)
+    mode = mode == 'carry' and 'carry' or 'escort'
 
     if not targetId or targetId == src then
         return
@@ -156,8 +156,8 @@ local function handleRequest(src, targetId)
     stampCooldown(src)
     stampCooldown(targetId)
 
-    TriggerClientEvent('escort:start', src, targetId)
-    TriggerClientEvent('escort:beingEscorted', targetId, src)
+    TriggerClientEvent('escort:start', src, targetId, mode)
+    TriggerClientEvent('escort:beingEscorted', targetId, src, mode)
 
     notifyPlayer(src, ('You started %s on ID %s'):format(mode, targetId), 'success')
     notifyPlayer(targetId, ('You are being %sed by ID %s'):format(mode, src), 'inform')
@@ -250,7 +250,7 @@ local function handleVehicleAction(src, targetId, action, vehicleNetId)
 end
 
 RegisterNetEvent('escort:requestAction', function(targetId, mode)
-    handleRequest(source, targetId)
+    handleRequest(source, targetId, mode)
 end)
 
 RegisterNetEvent('escort:stopAction', function()
@@ -267,7 +267,7 @@ end)
 
 -- Backwards compatibility with older clients
 RegisterNetEvent('escort:requestEscort', function(targetId)
-    handleRequest(source, targetId)
+    handleRequest(source, targetId, 'escort')
 end)
 
 RegisterNetEvent('escort:stopEscort', function()
