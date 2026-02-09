@@ -34,5 +34,9 @@ Config.Animations = {
         TargetTakeOut = { dict = 'mp_arresting', clip = 'base', flag = 33, duration = 1000, blendIn = 0.2, blendOut = 0.2 },
         EnterDelayMs = 1200,
         ExitDelayMs = 1000
+    },
+    Carry = {
+        Carrier = { dict = 'missfinale_c2mcs_1', clip = 'fin_c2_mcs_1_camman', flag = 49, duration = -1, blendIn = 0.2, blendOut = 0.2 },
+        Carried = { dict = 'nm', clip = 'firemans_carry', flag = 33, duration = -1, blendIn = 0.2, blendOut = 0.2 }
     }
 }
