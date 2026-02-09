@@ -42,6 +42,27 @@ end
 
 
 
+local function isVehicleEntity(entity)
+    if not entity or entity == 0 or not DoesEntityExist(entity) then
+        return false
+    end
+
+    if type(IsEntityAVehicle) == 'function' then
+        return IsEntityAVehicle(entity)
+    end
+
+    if type(GetEntityType) == 'function' then
+        return GetEntityType(entity) == 2
+    end
+
+    if type(GetVehicleClass) == 'function' then
+        local ok = pcall(GetVehicleClass, entity)
+        return ok
+    end
+
+    return false
+end
+
 local function isNearVehicle(src, vehicleNetId)
     if not vehicleNetId then
         return false
@@ -49,7 +70,7 @@ local function isNearVehicle(src, vehicleNetId)
 
     local srcPed = GetPlayerPed(src)
     local vehicle = NetworkGetEntityFromNetworkId(vehicleNetId)
-    if srcPed == 0 or vehicle == 0 or not DoesEntityExist(vehicle) or GetEntityType(vehicle) ~= 2 then
+    if srcPed == 0 or not isVehicleEntity(vehicle) then
         return false
     end
 
