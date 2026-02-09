@@ -17,6 +17,8 @@ local animationDictionary = nil
 local escortedAnimationDictionary = nil
 local escortWalkAnimPlaying = false
 local currentEscortMode = 'escort'
+local isInTrunk = false
+local trunkVehicle = 0
 
 -- Default animation dictionaries/clips (overridden by Config.Animations when present)
 local ANIM_DICTS = {
@@ -418,6 +420,37 @@ local function isPedInVehicle(ped)
     return IsPedInAnyVehicle(ped, false)
 end
 
+local function getVehicleFromNetId(vehicleNetId)
+    if not vehicleNetId then
+        return 0
+    end
+
+    local vehicle = NetToVeh(vehicleNetId)
+    if vehicle ~= 0 and DoesEntityExist(vehicle) then
+        return vehicle
+    end
+
+    return 0
+end
+
+local function isVehicleUnlocked(vehicle)
+    if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) then
+        return false
+    end
+
+    local lockStatus = GetVehicleDoorLockStatus(vehicle)
+    return lockStatus == 0 or lockStatus == 1
+end
+
+local function getNearestVehicle()
+    local coords = GetEntityCoords(PlayerPedId())
+    local vehicle = GetClosestVehicle(coords.x, coords.y, coords.z, Config.VehicleSearchRadius or 5.0, 0, 71)
+    if vehicle ~= 0 and DoesEntityExist(vehicle) then
+        return vehicle
+    end
+
+    return 0
+end
 
 local function blockVehicleEntryWhileEscorting()
     if not isEscorting then
@@ -561,6 +594,126 @@ local function requestVehicleAction(action, targetServerId, vehicleNetId)
     stampCooldown()
 end
 
+local function requestDirectTakeout(targetServerId, vehicleNetId)
+    if not Config.AllowDirectVehicleTakeout then
+        notify('Direct vehicle takeout is disabled', 'error')
+        return
+    end
+
+    if onCooldown() then
+        return
+    end
+
+    if not targetServerId then
+        targetServerId = getNearestTargetServerId(false)
+    end
+
+    if not targetServerId then
+        return
+    end
+
+    TriggerServerEvent('escort:directTakeout', targetServerId, vehicleNetId)
+    stampCooldown()
+end
+
+local function requestTrunkAction(action, targetServerId, vehicle)
+    if not Config.AllowTrunkActions then
+        notify('Trunk actions are disabled', 'error')
+        return
+    end
+
+    if onCooldown() then
+        return
+    end
+
+    if not targetServerId then
+        targetServerId = getNearestTargetServerId(false)
+    end
+
+    if not targetServerId then
+        return
+    end
+
+    if (not vehicle or vehicle == 0) then
+        vehicle = getNearestVehicle()
+    end
+
+    if vehicle == 0 or not DoesEntityExist(vehicle) then
+        notify('No nearby vehicle found', 'error')
+        return
+    end
+
+    if not isVehicleUnlocked(vehicle) then
+        notify('Vehicle must be unlocked', 'error')
+        return
+    end
+
+    TriggerServerEvent('escort:trunkAction', targetServerId, action, VehToNet(vehicle))
+    stampCooldown()
+end
+
+local function toggleSelfTrunk(vehicle)
+    if not Config.AllowTrunkActions then
+        notify('Trunk actions are disabled', 'error')
+        return
+    end
+
+    local myPed = PlayerPedId()
+
+    if isInTrunk then
+        local activeVehicle = trunkVehicle
+        if activeVehicle == 0 or not DoesEntityExist(activeVehicle) then
+            activeVehicle = GetVehiclePedIsIn(myPed, false)
+        end
+
+        isInTrunk = false
+        trunkVehicle = 0
+        DetachEntity(myPed, true, true)
+        SetEntityVisible(myPed, true, false)
+        SetEntityCollision(myPed, true, true)
+        FreezeEntityPosition(myPed, false)
+
+        if activeVehicle ~= 0 and DoesEntityExist(activeVehicle) then
+            SetVehicleDoorOpen(activeVehicle, 5, false, false)
+            Wait(300)
+            SetVehicleDoorShut(activeVehicle, 5, false)
+            local exitCoords = GetOffsetFromEntityInWorldCoords(activeVehicle, 0.0, -2.5, 0.0)
+            SetEntityCoords(myPed, exitCoords.x, exitCoords.y, exitCoords.z, false, false, false, false)
+        end
+
+        notify('You exited the trunk', 'success')
+        return
+    end
+
+    if not vehicle or vehicle == 0 then
+        vehicle = getNearestVehicle()
+    end
+
+    if vehicle == 0 or not DoesEntityExist(vehicle) then
+        notify('No nearby vehicle found', 'error')
+        return
+    end
+
+    if not isVehicleUnlocked(vehicle) then
+        notify('Vehicle must be unlocked', 'error')
+        return
+    end
+
+    SetVehicleDoorOpen(vehicle, 5, false, false)
+    Wait(200)
+
+    local trunkPos = GetOffsetFromEntityInWorldCoords(vehicle, 0.0, -2.1, 0.2)
+    SetEntityCoords(myPed, trunkPos.x, trunkPos.y, trunkPos.z, false, false, false, false)
+    AttachEntityToEntity(myPed, vehicle, 0, 0.0, -2.2, 0.35, 0.0, 0.0, 0.0, false, false, false, false, 2, true)
+    SetEntityVisible(myPed, false, false)
+    SetEntityCollision(myPed, false, false)
+    FreezeEntityPosition(myPed, true)
+    trunkVehicle = vehicle
+    isInTrunk = true
+
+    notify('You entered the trunk', 'success')
+end
+
 -- =============================================================================
 -- COMMANDS AND KEYBINDS
 -- =============================================================================
@@ -581,6 +734,22 @@ RegisterCommand('takeoutvehicle', function()
     requestVehicleAction('takeout')
 end, false)
 
+RegisterCommand('takeoutvehicledirect', function()
+    requestDirectTakeout()
+end, false)
+
+RegisterCommand('toggletrunk', function()
+    toggleSelfTrunk()
+end, false)
+
+RegisterCommand('putintrunk', function()
+    requestTrunkAction('putin')
+end, false)
+
+RegisterCommand('takeouttrunk', function()
+    requestTrunkAction('takeout')
+end, false)
+
 RegisterCommand('escort:keybindToggle', function()
     toggleEscort()
 end, false)
@@ -588,6 +757,10 @@ end, false)
 RegisterKeyMapping('escort:keybindToggle', 'Toggle Escort Player (alive target)', 'keyboard', Config.DefaultEscortKey or Config.DefaultKey or 'H')
 RegisterKeyMapping('putinvehicle', 'Put nearby escorted player in nearest vehicle', 'keyboard', Config.DefaultPutInVehicleKey or 'J')
 RegisterKeyMapping('takeoutvehicle', 'Take escorted player out of vehicle', 'keyboard', Config.DefaultTakeOutVehicleKey or 'K')
+RegisterKeyMapping('takeoutvehicledirect', 'Take nearby player out of vehicle (no escort)', 'keyboard', Config.DefaultTakeOutVehicleDirectKey or 'L')
+RegisterKeyMapping('toggletrunk', 'Enter or exit nearest unlocked trunk', 'keyboard', Config.DefaultEnterTrunkKey or 'SEMICOLON')
+RegisterKeyMapping('putintrunk', 'Put nearby player in selected unlocked trunk', 'keyboard', Config.DefaultPutInTrunkKey or 'N')
+RegisterKeyMapping('takeouttrunk', 'Take nearby player out of selected unlocked trunk', 'keyboard', Config.DefaultTakeOutTrunkKey or 'M')
 
 -- =============================================================================
 -- OX_TARGET INTEGRATION
@@ -685,6 +858,23 @@ if Config.UseTarget then
                     canInteract = function()
                         return Config.AllowVehicleEscort
                     end
+                },
+                {
+                    name = 'escort_takeout_vehicle_direct',
+                    icon = 'fa-solid fa-person-walking-arrow-right',
+                    label = 'Take Out Vehicle (No Escort)',
+                    distance = Config.MaxEscortDistance,
+                    onSelect = function(data)
+                        local targetId = NetworkGetPlayerIndexFromPed(data.entity)
+                        if targetId == -1 then
+                            return
+                        end
+
+                        requestDirectTakeout(GetPlayerServerId(targetId))
+                    end,
+                    canInteract = function()
+                        return Config.AllowDirectVehicleTakeout
+                    end
                 }
             })
 
@@ -752,6 +942,54 @@ if Config.UseTarget then
                         end
 
                         return GetVehiclePedIsIn(escortedPed, false) == entity
+                    end
+                },
+                {
+                    name = 'escort_takeout_vehicle_direct_selected',
+                    icon = 'fa-solid fa-person-walking-arrow-right',
+                    label = 'Take Nearby Out Of This Vehicle',
+                    distance = 3.0,
+                    onSelect = function(data)
+                        requestDirectTakeout(nil, VehToNet(data.entity))
+                    end,
+                    canInteract = function(entity)
+                        return Config.AllowDirectVehicleTakeout and entity and entity ~= 0 and DoesEntityExist(entity)
+                    end
+                },
+                {
+                    name = 'escort_toggle_self_trunk',
+                    icon = 'fa-solid fa-box-open',
+                    label = 'Enter / Exit Trunk',
+                    distance = 3.0,
+                    onSelect = function(data)
+                        toggleSelfTrunk(data.entity)
+                    end,
+                    canInteract = function(entity)
+                        return Config.AllowTrunkActions and entity and entity ~= 0 and DoesEntityExist(entity) and isVehicleUnlocked(entity)
+                    end
+                },
+                {
+                    name = 'escort_put_trunk_selected',
+                    icon = 'fa-solid fa-people-carry-box',
+                    label = 'Put Nearby In Trunk',
+                    distance = 3.0,
+                    onSelect = function(data)
+                        requestTrunkAction('putin', nil, data.entity)
+                    end,
+                    canInteract = function(entity)
+                        return Config.AllowTrunkActions and entity and entity ~= 0 and DoesEntityExist(entity) and isVehicleUnlocked(entity)
+                    end
+                },
+                {
+                    name = 'escort_takeout_trunk_selected',
+                    icon = 'fa-solid fa-person-circle-minus',
+                    label = 'Take Nearby Out Of Trunk',
+                    distance = 3.0,
+                    onSelect = function(data)
+                        requestTrunkAction('takeout', nil, data.entity)
+                    end,
+                    canInteract = function(entity)
+                        return Config.AllowTrunkActions and entity and entity ~= 0 and DoesEntityExist(entity) and isVehicleUnlocked(entity)
                     end
                 }
             })
@@ -978,6 +1216,57 @@ RegisterNetEvent('escort:vehicle', function(action, vehicleNetId)
     end
 end)
 
+RegisterNetEvent('escort:trunk', function(action, vehicleNetId)
+    local myPed = PlayerPedId()
+    local vehicle = getVehicleFromNetId(vehicleNetId)
+
+    if vehicle == 0 then
+        notify('Invalid vehicle selected', 'error')
+        return
+    end
+
+    SetVehicleDoorOpen(vehicle, 5, false, false)
+    Wait(200)
+
+    if action == 'putin' then
+        isBeingEscorted = false
+        escortedBy = nil
+        currentEscortMode = 'escort'
+
+        DetachEntity(myPed, true, false)
+        ClearPedTasksImmediately(myPed)
+
+        local trunkPos = GetOffsetFromEntityInWorldCoords(vehicle, 0.0, -2.1, 0.2)
+        SetEntityCoords(myPed, trunkPos.x, trunkPos.y, trunkPos.z, false, false, false, false)
+        AttachEntityToEntity(myPed, vehicle, 0, 0.0, -2.2, 0.35, 0.0, 0.0, 0.0, false, false, false, false, 2, true)
+        SetEntityVisible(myPed, false, false)
+        SetEntityCollision(myPed, false, false)
+        FreezeEntityPosition(myPed, true)
+        isInTrunk = true
+        trunkVehicle = vehicle
+
+        notify('Placed in trunk', 'success')
+        return
+    end
+
+    if action == 'takeout' then
+        if isInTrunk then
+            DetachEntity(myPed, true, true)
+            SetEntityVisible(myPed, true, false)
+            SetEntityCollision(myPed, true, true)
+            FreezeEntityPosition(myPed, false)
+            isInTrunk = false
+            trunkVehicle = 0
+        end
+
+        local exitCoords = GetOffsetFromEntityInWorldCoords(vehicle, 0.0, -2.5, 0.0)
+        SetEntityCoords(myPed, exitCoords.x, exitCoords.y, exitCoords.z, false, false, false, false)
+        Wait(200)
+        SetVehicleDoorShut(vehicle, 5, false)
+        notify('Removed from trunk', 'success')
+    end
+end)
+
 -- Event: Stop escort - ENHANCED WITH STOP ANIMATION
 RegisterNetEvent('escort:stop', function()
     stopRequestPending = false
@@ -1036,6 +1325,10 @@ TriggerEvent('chat:addSuggestion', '/escort', 'Escort or release a nearby living
 TriggerEvent('chat:addSuggestion', '/carry', 'Carry or release a nearby player (including downed/dead)')
 TriggerEvent('chat:addSuggestion', '/putinvehicle', 'Put nearby escorted target into nearest vehicle')
 TriggerEvent('chat:addSuggestion', '/takeoutvehicle', 'Take nearby escorted target out of vehicle')
+TriggerEvent('chat:addSuggestion', '/takeoutvehicledirect', 'Take nearby player out of vehicle without escorting first')
+TriggerEvent('chat:addSuggestion', '/toggletrunk', 'Enter or exit the nearest unlocked trunk')
+TriggerEvent('chat:addSuggestion', '/putintrunk', 'Put nearby player in selected unlocked trunk')
+TriggerEvent('chat:addSuggestion', '/takeouttrunk', 'Take nearby player out of selected unlocked trunk')
 
 -- =============================================================================
 -- RESOURCE STOP HANDLER - CLEANUP ANIMATIONS
@@ -1074,6 +1367,15 @@ AddEventHandler('onResourceStop', function(resourceName)
                 RemoveAnimDict(animationDictionary)
             end
         end
+    end
+
+    if isInTrunk and DoesEntityExist(myPed) then
+        DetachEntity(myPed, true, true)
+        SetEntityVisible(myPed, true, false)
+        SetEntityCollision(myPed, true, true)
+        FreezeEntityPosition(myPed, false)
+        isInTrunk = false
+        trunkVehicle = 0
     end
 end)
 

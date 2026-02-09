@@ -249,6 +249,87 @@ local function handleVehicleAction(src, targetId, action, vehicleNetId)
     end
 end
 
+local function isVehicleUnlocked(vehicle)
+    if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) then
+        return false
+    end
+
+    local lockStatus = GetVehicleDoorLockStatus(vehicle)
+    return lockStatus == 0 or lockStatus == 1
+end
+
+local function handleDirectTakeout(src, targetId, vehicleNetId)
+    if not targetId or targetId == src then
+        return
+    end
+
+    if not Framework.Server.PlayerExists(src) or not Framework.Server.PlayerExists(targetId) then
+        return
+    end
+
+    if isOnCooldown(src) then
+        notifyPlayer(src, 'Action is on cooldown', 'error')
+        return
+    end
+
+    if not areNearby(src, targetId) and not isNearVehicle(src, vehicleNetId) then
+        notifyPlayer(src, 'Target is too far away', 'error')
+        return
+    end
+
+    TriggerClientEvent('escort:vehicle', targetId, 'takeout', vehicleNetId)
+    TriggerClientEvent('escort:vehicleAnimation', src, 'takeout')
+    stampCooldown(src)
+
+    notifyPlayer(src, 'Attempting to remove target from vehicle', 'success')
+    notifyPlayer(targetId, 'You are being taken out of a vehicle', 'inform')
+end
+
+local function handleTrunkAction(src, targetId, action, vehicleNetId)
+    action = action == 'takeout' and 'takeout' or 'putin'
+
+    if not targetId or targetId == src then
+        return
+    end
+
+    if not Framework.Server.PlayerExists(src) or not Framework.Server.PlayerExists(targetId) then
+        return
+    end
+
+    if isOnCooldown(src) then
+        notifyPlayer(src, 'Action is on cooldown', 'error')
+        return
+    end
+
+    local vehicle = vehicleNetId and NetworkGetEntityFromNetworkId(vehicleNetId) or 0
+    if not isVehicleEntity(vehicle) then
+        notifyPlayer(src, 'Invalid vehicle selected', 'error')
+        return
+    end
+
+    if not isVehicleUnlocked(vehicle) then
+        notifyPlayer(src, 'Vehicle must be unlocked', 'error')
+        return
+    end
+
+    if not areNearby(src, targetId) and not isNearVehicle(src, vehicleNetId) then
+        notifyPlayer(src, 'Target is too far away', 'error')
+        return
+    end
+
+    TriggerClientEvent('escort:trunk', targetId, action, vehicleNetId)
+    TriggerClientEvent('escort:vehicleAnimation', src, action == 'putin' and 'putin' or 'takeout')
+    stampCooldown(src)
+
+    if action == 'putin' then
+        notifyPlayer(src, 'Attempting to place target in trunk', 'success')
+        notifyPlayer(targetId, 'You are being placed in a trunk', 'inform')
+    else
+        notifyPlayer(src, 'Attempting to remove target from trunk', 'success')
+        notifyPlayer(targetId, 'You are being removed from a trunk', 'inform')
+    end
+end
+
 RegisterNetEvent('escort:requestAction', function(targetId, mode)
     handleRequest(source, targetId, mode)
 end)
@@ -263,6 +344,14 @@ end)
 
 RegisterNetEvent('escort:vehicleAction', function(targetId, action, vehicleNetId)
     handleVehicleAction(source, targetId, action, vehicleNetId)
+end)
+
+RegisterNetEvent('escort:directTakeout', function(targetId, vehicleNetId)
+    handleDirectTakeout(source, targetId, vehicleNetId)
+end)
+
+RegisterNetEvent('escort:trunkAction', function(targetId, action, vehicleNetId)
+    handleTrunkAction(source, targetId, action, vehicleNetId)
 end)
 
 -- Backwards compatibility with older clients
