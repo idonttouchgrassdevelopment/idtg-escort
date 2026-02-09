@@ -5,7 +5,7 @@ A multi-framework FiveM escort script focused on player escorting (vehicle place
 ## Features
 - Multi-framework support (QBox, QBCore, ESX, Standalone)
 - Auto framework detection
-- Escort system focused on living players only (carry removed)
+- Escort system with living-player escort plus `/carry` support for downed/dead targets
 - Escorter-controlled stop flow via `/escort` toggle
 - Escorts are blocked while either player is entering or inside a vehicle
 - Optional escorted target vehicle in/out actions (disabled by default)
@@ -16,6 +16,7 @@ A multi-framework FiveM escort script focused on player escorting (vehicle place
 
 ## Commands
 - `/escort` - Start/stop escort for alive targets
+- `/carry` - Start/stop carry (allows downed/dead targets)
 - `/putinvehicle` - Put escorted target in nearest vehicle
 - `/takeoutvehicle` - Remove escorted target from vehicle
 - `/escortdebug` - Print local debug state
@@ -40,3 +41,6 @@ A multi-framework FiveM escort script focused on player escorting (vehicle place
 - Notifications use framework-native APIs when available and fallback to chat messages.
 - If `ox_target` is enabled, player target options include escort, put in vehicle, and take out vehicle.
 - If `ox_target` is enabled, vehicle target options include putting your currently escorted target into the specific vehicle you third-eye.
+
+## Quick Validation
+- `python3 scripts/check_lua_syntax.py` - Best-effort Lua syntax check. Uses `luac`, `lua`, `luajit`, or Python `luaparser` when available; otherwise reports a warning and skips.
