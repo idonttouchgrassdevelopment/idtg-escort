@@ -3,6 +3,10 @@ Config = {}
 Config.DefaultEscortKey = 'H' -- Default escort keybind (can be changed by player in settings)
 Config.DefaultPutInVehicleKey = 'J' -- Put escorted target in vehicle
 Config.DefaultTakeOutVehicleKey = 'K' -- Take escorted target out of vehicle
+Config.DefaultTakeOutVehicleDirectKey = 'L' -- Take nearby target out of vehicle (no escort required)
+Config.DefaultEnterTrunkKey = 'SEMICOLON' -- Enter or exit nearest unlocked trunk
+Config.DefaultPutInTrunkKey = 'N' -- Put nearby target in selected unlocked trunk
+Config.DefaultTakeOutTrunkKey = 'M' -- Take nearby target out of selected unlocked trunk
 Config.DefaultKey = Config.DefaultEscortKey -- Backwards compatibility for older configs
 Config.MaxEscortDistance = 2.5 -- Maximum distance to start escort
 Config.VehicleSearchRadius = 5.0 -- Range used for finding closest vehicle when putting target in
@@ -15,6 +19,8 @@ Config.NotifyDuration = 5000 -- Notification duration in ms
 -- Escort Options
 Config.AllowEscortAlive = true -- Allow escorting alive players
 Config.AllowVehicleEscort = true -- Enable putting escorted players into/out of vehicles
+Config.AllowDirectVehicleTakeout = true -- Allow taking someone out of a vehicle without an escort state
+Config.AllowTrunkActions = true -- Enable trunk enter/exit and put in/out actions
 
 -- Framework Options: 'qbox', 'qbcore', 'esx', 'standalone'
 Config.Framework = 'auto' -- 'auto' will detect automatically
