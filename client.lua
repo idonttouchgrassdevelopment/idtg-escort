@@ -543,6 +543,10 @@ RegisterCommand('escort', function()
     toggleEscort()
 end, false)
 
+RegisterCommand('carry', function()
+    toggleEscort()
+end, false)
+
 RegisterCommand('putinvehicle', function()
     requestVehicleAction('putin')
 end, false)
@@ -977,6 +981,7 @@ end)
 -- =============================================================================
 
 TriggerEvent('chat:addSuggestion', '/escort', 'Escort or release a nearby living player')
+TriggerEvent('chat:addSuggestion', '/carry', 'Carry or release a nearby living player')
 TriggerEvent('chat:addSuggestion', '/putinvehicle', 'Put nearby escorted target into nearest vehicle')
 TriggerEvent('chat:addSuggestion', '/takeoutvehicle', 'Take nearby escorted target out of vehicle')
 

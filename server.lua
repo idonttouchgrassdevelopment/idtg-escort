@@ -49,7 +49,7 @@ local function isNearVehicle(src, vehicleNetId)
 
     local srcPed = GetPlayerPed(src)
     local vehicle = NetworkGetEntityFromNetworkId(vehicleNetId)
-    if srcPed == 0 or vehicle == 0 or not DoesEntityExist(vehicle) or not IsEntityAVehicle(vehicle) then
+    if srcPed == 0 or vehicle == 0 or not DoesEntityExist(vehicle) or GetEntityType(vehicle) ~= 2 then
         return false
     end
 
