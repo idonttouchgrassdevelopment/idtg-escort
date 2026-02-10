@@ -1185,6 +1185,7 @@ RegisterNetEvent('escort:vehicle', function(action, vehicleNetId)
             return
         end
 
+        TriggerServerEvent('escort:systemStop')
         notify('Placed in vehicle', 'success')
         return
     end
