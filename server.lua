@@ -1,5 +1,6 @@
 local escortCooldowns = {}
 local escortStates = {} -- [escorter] = target
+local trunkCooldowns = {}
 
 local function getCooldownMs()
     return Config.ActionCooldown or Config.EscortCooldown or 5000
@@ -274,6 +275,23 @@ local function isVehicleUnlocked(vehicle)
     return lockStatus == 0 or lockStatus == 1
 end
 
+local function getTrunkCooldownMs()
+    return Config.TrunkActionCooldown or 2000
+end
+
+local function isOnTrunkCooldown(playerId)
+    local lastTime = trunkCooldowns[playerId]
+    if not lastTime then
+        return false
+    end
+
+    return (GetGameTimer() - lastTime) < getTrunkCooldownMs()
+end
+
+local function stampTrunkCooldown(playerId)
+    trunkCooldowns[playerId] = GetGameTimer()
+end
+
 local function handleDirectTakeout(src, targetId, vehicleNetId)
     if not targetId or targetId == src then
         return
@@ -327,6 +345,11 @@ local function handleTrunkAction(src, targetId, action, vehicleNetId)
         return
     end
 
+    if isOnTrunkCooldown(src) then
+        notifyPlayer(src, 'Trunk action is on cooldown', 'error')
+        return
+    end
+
     local vehicle = vehicleNetId and NetworkGetEntityFromNetworkId(vehicleNetId) or 0
     if not isVehicleEntity(vehicle) then
         notifyPlayer(src, 'Invalid vehicle selected', 'error')
@@ -346,6 +369,7 @@ local function handleTrunkAction(src, targetId, action, vehicleNetId)
     TriggerClientEvent('escort:trunk', targetId, action, vehicleNetId)
     TriggerClientEvent('escort:vehicleAnimation', src, action == 'putin' and 'putin' or 'takeout')
     stampCooldown(src)
+    stampTrunkCooldown(src)
 
     if action == 'putin' then
         notifyPlayer(src, 'Attempting to place target in trunk', 'success')
@@ -392,6 +416,7 @@ end)
 AddEventHandler('playerDropped', function()
     local src = source
     escortCooldowns[src] = nil
+    trunkCooldowns[src] = nil
 
     if escortStates[src] then
         local targetId = escortStates[src]

@@ -19,6 +19,7 @@ local escortWalkAnimPlaying = false
 local currentEscortMode = 'escort'
 local isInTrunk = false
 local trunkVehicle = 0
+local lastTrunkActionTime = 0
 
 -- Default animation dictionaries/clips (overridden by Config.Animations when present)
 local ANIM_DICTS = {
@@ -149,6 +150,10 @@ local function getCooldownMs()
     return Config.ActionCooldown or Config.EscortCooldown or 5000
 end
 
+local function getTrunkCooldownMs()
+    return Config.TrunkActionCooldown or 2000
+end
+
 local function notify(message, type, duration)
     Framework.Client.Notify(message, type or 'inform', duration)
 end
@@ -168,6 +173,22 @@ end
 
 local function stampCooldown()
     lastActionTime = GetGameTimer()
+end
+
+local function isTrunkOnCooldown()
+    local currentTime = GetGameTimer()
+    local remaining = getTrunkCooldownMs() - (currentTime - lastTrunkActionTime)
+
+    if remaining > 0 then
+        notify(('Trunk action on cooldown (%ss)'):format(math.ceil(remaining / 1000)), 'error')
+        return true
+    end
+
+    return false
+end
+
+local function stampTrunkCooldown()
+    lastTrunkActionTime = GetGameTimer()
 end
 
 -- =============================================================================
@@ -439,7 +460,9 @@ local function isVehicleUnlocked(vehicle)
     end
 
     local lockStatus = GetVehicleDoorLockStatus(vehicle)
-    return lockStatus == 0 or lockStatus == 1
+    local lockedForPlayer = GetVehicleDoorsLockedForPlayer(vehicle, PlayerId())
+
+    return (lockStatus == 0 or lockStatus == 1) and not lockedForPlayer
 end
 
 local function getNearestVehicle()
@@ -650,11 +673,16 @@ local function requestTrunkAction(action, targetServerId, vehicle)
 
     TriggerServerEvent('escort:trunkAction', targetServerId, action, VehToNet(vehicle))
     stampCooldown()
+    stampTrunkCooldown()
 end
 
 local function toggleSelfTrunk(vehicle)
     if not Config.AllowTrunkActions then
         notify('Trunk actions are disabled', 'error')
+        return
+    end
+
+    if isTrunkOnCooldown() then
         return
     end
 
@@ -664,6 +692,11 @@ local function toggleSelfTrunk(vehicle)
         local activeVehicle = trunkVehicle
         if activeVehicle == 0 or not DoesEntityExist(activeVehicle) then
             activeVehicle = GetVehiclePedIsIn(myPed, false)
+        end
+
+        if activeVehicle ~= 0 and DoesEntityExist(activeVehicle) and not isVehicleUnlocked(activeVehicle) then
+            notify('Vehicle must be unlocked', 'error')
+            return
         end
 
         isInTrunk = false
@@ -682,6 +715,7 @@ local function toggleSelfTrunk(vehicle)
         end
 
         notify('You exited the trunk', 'success')
+        stampTrunkCooldown()
         return
     end
 
@@ -712,6 +746,7 @@ local function toggleSelfTrunk(vehicle)
     isInTrunk = true
 
     notify('You entered the trunk', 'success')
+    stampTrunkCooldown()
 end
 
 -- =============================================================================
