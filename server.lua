@@ -172,7 +172,8 @@ local function handleStop(src)
     local target = escortStates[escorter]
 
     if not escorter or not target then
-        notifyPlayer(src, 'Only the escorter can stop escorting', 'error')
+        -- Ignore stale/automatic stop requests from non-escorters to avoid
+        -- notification spam during normal gameplay state transitions.
         return
     end
 
