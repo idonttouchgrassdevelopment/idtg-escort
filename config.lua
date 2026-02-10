@@ -14,6 +14,7 @@ Config.UseTarget = true -- Set to true if you want to use ox_target
 Config.Debug = true -- Set to false to disable debug prints
 Config.ActionCooldown = 5000 -- Cooldown between escort actions in milliseconds
 Config.EscortCooldown = Config.ActionCooldown -- Backwards compatibility for older configs
+Config.TrunkActionCooldown = 2000 -- Cooldown between trunk actions in milliseconds
 Config.NotifyDuration = 5000 -- Notification duration in ms
 
 -- Escort Options

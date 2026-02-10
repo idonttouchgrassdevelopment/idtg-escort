@@ -38,6 +38,7 @@ A multi-framework FiveM escort script focused on player escorting (vehicle place
 
 ## Config Highlights (`config.lua`)
 - `Config.ActionCooldown`
+- `Config.TrunkActionCooldown`
 - `Config.MaxEscortDistance`
 - `Config.VehicleSearchRadius`
 - `Config.NotifyDuration`
@@ -52,6 +53,7 @@ A multi-framework FiveM escort script focused on player escorting (vehicle place
 - Escorted vehicle actions require an active escort pair and `Config.AllowVehicleEscort = true`.
 - Direct takeout does not require escorting, but still requires target/vehicle proximity and can be disabled with `Config.AllowDirectVehicleTakeout`.
 - Trunk actions require the selected vehicle to be unlocked and `Config.AllowTrunkActions = true`.
+- Trunk actions also use a dedicated anti-spam timer via `Config.TrunkActionCooldown`.
 - Notifications use framework-native APIs when available and fallback to chat messages.
 - If `ox_target` is enabled, player target options include escort, put in vehicle, and take out vehicle.
 - If `ox_target` is enabled, vehicle target options include putting your currently escorted target into the specific vehicle you third-eye.
