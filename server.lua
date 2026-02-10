@@ -216,6 +216,11 @@ local function handleVehicleAction(src, targetId, action, vehicleNetId)
         return
     end
 
+    local targetPed = GetPlayerPed(targetId)
+    if targetPed == 0 then
+        return
+    end
+
     if isOnCooldown(src) then
         notifyPlayer(src, 'Action is on cooldown', 'error')
         return
@@ -234,6 +239,16 @@ local function handleVehicleAction(src, targetId, action, vehicleNetId)
     local vehicleNearby = isNearVehicle(src, vehicleNetId)
     if not targetNearby and not vehicleNearby then
         notifyPlayer(src, 'Target is too far away', 'error')
+        return
+    end
+
+    if action == 'putin' and isPedInVehicle(targetPed) then
+        notifyPlayer(src, 'Target is already in a vehicle', 'error')
+        return
+    end
+
+    if action == 'takeout' and not isPedInVehicle(targetPed) then
+        notifyPlayer(src, 'Target is not in a vehicle', 'error')
         return
     end
 
@@ -268,6 +283,11 @@ local function handleDirectTakeout(src, targetId, vehicleNetId)
         return
     end
 
+    local targetPed = GetPlayerPed(targetId)
+    if targetPed == 0 then
+        return
+    end
+
     if isOnCooldown(src) then
         notifyPlayer(src, 'Action is on cooldown', 'error')
         return
@@ -275,6 +295,11 @@ local function handleDirectTakeout(src, targetId, vehicleNetId)
 
     if not areNearby(src, targetId) and not isNearVehicle(src, vehicleNetId) then
         notifyPlayer(src, 'Target is too far away', 'error')
+        return
+    end
+
+    if not isPedInVehicle(targetPed) then
+        notifyPlayer(src, 'Target is not in a vehicle', 'error')
         return
     end
 
