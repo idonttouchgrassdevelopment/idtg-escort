@@ -29,6 +29,7 @@ A multi-framework FiveM escort script focused on player escorting (vehicle place
 
 ## Default Keybinds
 - Escort: `H`
+- Carry: `G`
 - Put in vehicle: `J`
 - Take out vehicle: `K`
 - Direct take out (no escort): `L`

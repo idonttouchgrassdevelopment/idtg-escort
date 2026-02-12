@@ -813,6 +813,7 @@ RegisterCommand('takeouttrunk', function()
 end, false)
 
 RegisterKeyMapping('escort', 'Toggle Escort Player (alive target)', 'keyboard', Config.DefaultEscortKey or Config.DefaultKey or 'H')
+RegisterKeyMapping('carry', 'Toggle Carry Player (supports downed/dead targets)', 'keyboard', Config.DefaultCarryKey or 'G')
 RegisterKeyMapping('putinvehicle', 'Put nearby escorted player in nearest vehicle', 'keyboard', Config.DefaultPutInVehicleKey or 'J')
 RegisterKeyMapping('takeoutvehicle', 'Take escorted player out of vehicle', 'keyboard', Config.DefaultTakeOutVehicleKey or 'K')
 RegisterKeyMapping('takeoutvehicledirect', 'Take nearby player out of vehicle (no escort)', 'keyboard', Config.DefaultTakeOutVehicleDirectKey or 'L')
