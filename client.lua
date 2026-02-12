@@ -191,6 +191,16 @@ local function stampTrunkCooldown()
     lastTrunkActionTime = GetGameTimer()
 end
 
+local function syncTrunkState(inTrunk, vehicle)
+    local vehicleNetId = nil
+
+    if vehicle and vehicle ~= 0 and DoesEntityExist(vehicle) then
+        vehicleNetId = VehToNet(vehicle)
+    end
+
+    TriggerServerEvent('escort:trunkStateChanged', inTrunk == true, vehicleNetId)
+end
+
 -- =============================================================================
 -- ANIMATION SYSTEM
 -- =============================================================================
@@ -714,6 +724,7 @@ local function toggleSelfTrunk(vehicle)
             SetEntityCoords(myPed, exitCoords.x, exitCoords.y, exitCoords.z, false, false, false, false)
         end
 
+        syncTrunkState(false, activeVehicle)
         notify('You exited the trunk', 'success')
         stampTrunkCooldown()
         return
@@ -745,6 +756,7 @@ local function toggleSelfTrunk(vehicle)
     trunkVehicle = vehicle
     isInTrunk = true
 
+    syncTrunkState(true, vehicle)
     notify('You entered the trunk', 'success')
     stampTrunkCooldown()
 end
@@ -785,11 +797,7 @@ RegisterCommand('takeouttrunk', function()
     requestTrunkAction('takeout')
 end, false)
 
-RegisterCommand('escort:keybindToggle', function()
-    toggleEscort()
-end, false)
-
-RegisterKeyMapping('escort:keybindToggle', 'Toggle Escort Player (alive target)', 'keyboard', Config.DefaultEscortKey or Config.DefaultKey or 'H')
+RegisterKeyMapping('escort', 'Toggle Escort Player (alive target)', 'keyboard', Config.DefaultEscortKey or Config.DefaultKey or 'H')
 RegisterKeyMapping('putinvehicle', 'Put nearby escorted player in nearest vehicle', 'keyboard', Config.DefaultPutInVehicleKey or 'J')
 RegisterKeyMapping('takeoutvehicle', 'Take escorted player out of vehicle', 'keyboard', Config.DefaultTakeOutVehicleKey or 'K')
 RegisterKeyMapping('takeoutvehicledirect', 'Take nearby player out of vehicle (no escort)', 'keyboard', Config.DefaultTakeOutVehicleDirectKey or 'L')
@@ -1281,6 +1289,7 @@ RegisterNetEvent('escort:trunk', function(action, vehicleNetId)
         isInTrunk = true
         trunkVehicle = vehicle
 
+        syncTrunkState(true, vehicle)
         notify('Placed in trunk', 'success')
         return
     end
@@ -1293,6 +1302,7 @@ RegisterNetEvent('escort:trunk', function(action, vehicleNetId)
             FreezeEntityPosition(myPed, false)
             isInTrunk = false
             trunkVehicle = 0
+            syncTrunkState(false, vehicle)
         end
 
         local exitCoords = GetOffsetFromEntityInWorldCoords(vehicle, 0.0, -2.5, 0.0)
@@ -1300,6 +1310,32 @@ RegisterNetEvent('escort:trunk', function(action, vehicleNetId)
         Wait(200)
         SetVehicleDoorShut(vehicle, 5, false)
         notify('Removed from trunk', 'success')
+    end
+end)
+
+RegisterNetEvent('escort:trunkDenied', function(vehicleNetId)
+    local myPed = PlayerPedId()
+
+    if not isInTrunk then
+        return
+    end
+
+    local vehicle = getVehicleFromNetId(vehicleNetId)
+    if vehicle == 0 then
+        vehicle = trunkVehicle
+    end
+
+    DetachEntity(myPed, true, true)
+    SetEntityVisible(myPed, true, false)
+    SetEntityCollision(myPed, true, true)
+    FreezeEntityPosition(myPed, false)
+    isInTrunk = false
+    trunkVehicle = 0
+
+    if vehicle ~= 0 and DoesEntityExist(vehicle) then
+        local exitCoords = GetOffsetFromEntityInWorldCoords(vehicle, 0.0, -2.5, 0.0)
+        SetEntityCoords(myPed, exitCoords.x, exitCoords.y, exitCoords.z, false, false, false, false)
+        SetVehicleDoorShut(vehicle, 5, false)
     end
 end)
 
@@ -1406,12 +1442,14 @@ AddEventHandler('onResourceStop', function(resourceName)
     end
 
     if isInTrunk and DoesEntityExist(myPed) then
+        local activeVehicle = trunkVehicle
         DetachEntity(myPed, true, true)
         SetEntityVisible(myPed, true, false)
         SetEntityCollision(myPed, true, true)
         FreezeEntityPosition(myPed, false)
         isInTrunk = false
         trunkVehicle = 0
+        syncTrunkState(false, activeVehicle)
     end
 end)
 
