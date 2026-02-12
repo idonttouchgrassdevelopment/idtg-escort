@@ -659,6 +659,21 @@ local function requestTrunkAction(action, targetServerId, vehicle)
         return
     end
 
+    if action == 'putin' then
+        if not isEscorting or not escortedPlayer then
+            notify('You must be escorting or carrying someone first', 'error')
+            return
+        end
+
+        local escortedServerId = GetPlayerServerId(escortedPlayer)
+        if not escortedServerId or escortedServerId <= 0 then
+            notify('Escorted player is not available', 'error')
+            return
+        end
+
+        targetServerId = escortedServerId
+    end
+
     if not targetServerId then
         targetServerId = getNearestTargetServerId(false)
     end
@@ -1020,7 +1035,7 @@ if Config.UseTarget then
                         requestTrunkAction('putin', nil, data.entity)
                     end,
                     canInteract = function(entity)
-                        return Config.AllowTrunkActions and entity and entity ~= 0 and DoesEntityExist(entity) and isVehicleUnlocked(entity)
+                        return Config.AllowTrunkActions and isEscorting and escortedPlayer ~= nil and entity and entity ~= 0 and DoesEntityExist(entity) and isVehicleUnlocked(entity)
                     end
                 },
                 {

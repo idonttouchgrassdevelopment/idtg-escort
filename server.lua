@@ -386,6 +386,14 @@ local function handleTrunkAction(src, targetId, action, vehicleNetId)
         return
     end
 
+    if action == 'putin' then
+        local escortedTarget = escortStates[src]
+        if not escortedTarget or escortedTarget ~= targetId then
+            notifyPlayer(src, 'You must be escorting or carrying this player first', 'error')
+            return
+        end
+    end
+
     local vehicle = vehicleNetId and NetworkGetEntityFromNetworkId(vehicleNetId) or 0
     if not isVehicleEntity(vehicle) then
         notifyPlayer(src, 'Invalid vehicle selected', 'error')
@@ -411,6 +419,7 @@ local function handleTrunkAction(src, targetId, action, vehicleNetId)
     end
 
     if action == 'putin' then
+        stopEscortPair(src, targetId)
         setTrunkOccupancy(targetId, vehicleNetId)
     else
         clearTrunkOccupancy(targetId)
