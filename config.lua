@@ -1,6 +1,7 @@
 Config = {}
 
 Config.DefaultEscortKey = 'H' -- Default escort keybind (can be changed by player in settings)
+Config.DefaultCarryKey = 'G' -- Default carry keybind (can be changed by player in settings)
 Config.DefaultPutInVehicleKey = 'J' -- Put escorted target in vehicle
 Config.DefaultTakeOutVehicleKey = 'K' -- Take escorted target out of vehicle
 Config.DefaultTakeOutVehicleDirectKey = 'L' -- Take nearby target out of vehicle (no escort required)
