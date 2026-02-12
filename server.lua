@@ -1,6 +1,8 @@
 local escortCooldowns = {}
 local escortStates = {} -- [escorter] = target
 local trunkCooldowns = {}
+local trunkOccupantsByVehicle = {} -- [vehicleNetId] = playerId
+local trunkVehiclesByPlayer = {} -- [playerId] = vehicleNetId
 
 local function getCooldownMs()
     return Config.ActionCooldown or Config.EscortCooldown or 5000
@@ -90,6 +92,40 @@ end
 
 local function notifyPlayer(playerId, message, messageType)
     TriggerClientEvent('escort:notify', playerId, message, messageType or 'inform', Config.NotifyDuration or 5000)
+end
+
+
+local function clearTrunkOccupancy(playerId)
+    local vehicleNetId = trunkVehiclesByPlayer[playerId]
+    if vehicleNetId and trunkOccupantsByVehicle[vehicleNetId] == playerId then
+        trunkOccupantsByVehicle[vehicleNetId] = nil
+    end
+
+    trunkVehiclesByPlayer[playerId] = nil
+end
+
+local function setTrunkOccupancy(playerId, vehicleNetId)
+    if not vehicleNetId then
+        return
+    end
+
+    clearTrunkOccupancy(playerId)
+    trunkOccupantsByVehicle[vehicleNetId] = playerId
+    trunkVehiclesByPlayer[playerId] = vehicleNetId
+end
+
+local function getTrunkOccupant(vehicleNetId)
+    local occupant = trunkOccupantsByVehicle[vehicleNetId]
+    if not occupant then
+        return nil
+    end
+
+    if not Framework.Server.PlayerExists(occupant) then
+        trunkOccupantsByVehicle[vehicleNetId] = nil
+        return nil
+    end
+
+    return occupant
 end
 
 
@@ -361,9 +397,23 @@ local function handleTrunkAction(src, targetId, action, vehicleNetId)
         return
     end
 
+    if action == 'putin' then
+        local occupant = getTrunkOccupant(vehicleNetId)
+        if occupant and occupant ~= targetId then
+            notifyPlayer(src, 'This trunk is already occupied', 'error')
+            return
+        end
+    end
+
     if not areNearby(src, targetId) and not isNearVehicle(src, vehicleNetId) then
         notifyPlayer(src, 'Target is too far away', 'error')
         return
+    end
+
+    if action == 'putin' then
+        setTrunkOccupancy(targetId, vehicleNetId)
+    else
+        clearTrunkOccupancy(targetId)
     end
 
     TriggerClientEvent('escort:trunk', targetId, action, vehicleNetId)
@@ -404,6 +454,24 @@ RegisterNetEvent('escort:trunkAction', function(targetId, action, vehicleNetId)
     handleTrunkAction(source, targetId, action, vehicleNetId)
 end)
 
+RegisterNetEvent('escort:trunkStateChanged', function(isInTrunk, vehicleNetId)
+    local src = source
+
+    if isInTrunk then
+        local occupant = getTrunkOccupant(vehicleNetId)
+        if occupant and occupant ~= src then
+            TriggerClientEvent('escort:trunkDenied', src, vehicleNetId)
+            notifyPlayer(src, 'This trunk is already occupied', 'error')
+            return
+        end
+
+        setTrunkOccupancy(src, vehicleNetId)
+        return
+    end
+
+    clearTrunkOccupancy(src)
+end)
+
 -- Backwards compatibility with older clients
 RegisterNetEvent('escort:requestEscort', function(targetId)
     handleRequest(source, targetId, 'escort')
@@ -417,6 +485,7 @@ AddEventHandler('playerDropped', function()
     local src = source
     escortCooldowns[src] = nil
     trunkCooldowns[src] = nil
+    clearTrunkOccupancy(src)
 
     if escortStates[src] then
         local targetId = escortStates[src]
